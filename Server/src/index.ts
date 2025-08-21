@@ -92,6 +92,11 @@ const formatWhatsAppNumber = (number: string): string => {
   return cleanNumber.startsWith('+91') ? cleanNumber : `91${cleanNumber}`;
 };
 
+//**Mobile validation */
+const mobile_validate = (mobile: string): boolean => {
+  const mobileRegex = /^\+91[0-9]{10}$/;
+  return mobileRegex.test(mobile);
+};
 
 /* The `// Retry logic for API requests` section in the code is implementing a retry mechanism for
 making API requests. This mechanism allows the code to retry sending an API request a specified
@@ -126,13 +131,14 @@ const sendWithRetry = async (
 
 /* The code snippet you provided is defining a POST endpoint `/api/register` in the Express
 application. When a POST request is made to this endpoint, the server executes the callback function
-specified, which handles the registration process for a new admin. */
+specified, which handles the registration process for a new user / admin. */
 
 /**
  * @swagger
  * /api/register:
  *   post:
- *     summary: Register a new admin
+ *     tags: [Auth]
+ *     summary: Register a new user / admin
  *     requestBody:
  *       required: true
  *       content:
@@ -144,8 +150,11 @@ specified, which handles the registration process for a new admin. */
  *                 type: string
  *               mobile:
  *                 type: string
+ *               role:
+ *                 type: string
  *             required:
  *               - mobile
+ *               - role
  *     responses:
  *       200:
  *         description: Admin registered successfully
@@ -156,47 +165,26 @@ specified, which handles the registration process for a new admin. */
  */
 
 app.post('/api/register', (req: Request, res: Response) => {
-  const { username, mobile } = req.body;
+  const { username, mobile, role } = req.body;
+  const sanitizedMobile = sanitizePhoneNumber(mobile);
+  // Validate input
   if (!mobile) {
     return res.status(400).json({ error: 'Mobile number is required' });
   }
-
-  const sanitizedMobile = sanitizePhoneNumber(mobile);
-  const otp = generateOTP();
-
-  db.query('INSERT INTO admins (username, mobile, otp) VALUES (?, ?, ?)', [username, sanitizedMobile, otp], (err) => {
+  if(!mobile_validate(sanitizedMobile)) {
+    return res.status(400).json({ error: 'Invalid mobile number format' });
+  }
+  if(!role) {
+    return res.status(400).json({ error: 'Role is required' });
+  }
+  
+  db.query('INSERT INTO admins (username, mobile, role) VALUES (?, ?, ?)', [username, sanitizedMobile, role], (err) => {
     if (err) {
       console.error('Database error:', err);
       return res.status(500).json({ error: 'Server error' });
     }
 
-    const payload = {
-      to: formatWhatsAppNumber(sanitizedMobile),
-      type: 'template',
-      // text: `Your OTP for registration is ${otp}`,
-      template: {
-                  language: { policy: 'deterministic', code: 'en' },
-                  name: 'otp_copy',
-                  components: [
-                    { type: 'body', parameters: [{ type: 'text', text: otp }] },
-                    { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otp }] },
-                  ],
-                },
-    };
-
-    sendWithRetry(whatsappUrl, payload, { 'Content-Type': 'application/json' })
-      .then((result) => {
-        if (result.success) {
-          return res.status(200).json({ message: 'Admin registered successfully', otp });
-        } else {
-          console.error('WhatsApp API error:', result.error);
-          return res.status(500).json({ error: 'Failed to send OTP via WhatsApp' });
-        }
-      })
-      .catch((error) => {
-        console.error('Error sending WhatsApp message:', error);
-        return res.status(500).json({ error: 'Failed to send OTP via WhatsApp' });
-      });
+    return res.status(200).json({ message: `${role} : ${username} registered successfully` });
   });
 });
 
@@ -205,7 +193,8 @@ app.post('/api/register', (req: Request, res: Response) => {
  * @swagger
  * /api/Login:
  *   post:
- *     summary: Login an admin
+ *     tags: [Auth]
+ *     summary: Login for user / admin
  *     requestBody:
  *       required: true
  *       content:
@@ -213,8 +202,6 @@ app.post('/api/register', (req: Request, res: Response) => {
  *           schema:
  *             type: object
  *             properties:
- *               username:
- *                 type: string
  *               mobile:
  *                 type: string
  *             required:
@@ -227,6 +214,125 @@ app.post('/api/register', (req: Request, res: Response) => {
  *       500:
  *         description: Server error
  */
+/**
+ * The function handles user login by generating an OTP, validating the mobile number, and sending the
+ * OTP via WhatsApp.
+ */
+app.post('/api/Login', (req: Request, res: Response) => {
+  const { mobile } = req.body;
+  const sanitizedMobile = sanitizePhoneNumber(mobile);
+  // Validate input
+  if (!mobile) {
+    return res.status(400).json({ error: 'Mobile number is required' });
+  }
+  if (!mobile_validate(sanitizedMobile)) {
+    return res.status(400).json({ error: 'Invalid mobile number format' });
+  }
+
+  const otp = generateOTP()
+  const expiry = new Date(Date.now() + 5 * 60 * 1000) // OTP valid for 5 minutes
+  const whatsappNumber = formatWhatsAppNumber(mobile);
+
+  // Function to send OTP via WhatsApp
+  async function sendWhatsAppOTP() {
+    try {
+      const response = await axios.post(whatsappUrl, {
+        to: whatsappNumber,
+        type: 'template',
+        template: {
+                  language: { policy: 'deterministic', code: 'en' },
+                  name: 'otp_copy',
+                  components: [
+                    { type: 'body', parameters: [{ type: 'text', text: otp }] },
+                    { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otp }] },
+                  ],
+                }
+      });
+      console.log('WhatsApp API response:', response.data);
+    } catch (error) {
+      console.error('WhatsApp API error:', error);
+    }
+  }
+  
+  // Check if the mobile number exists in the database
+  db.query('UPDATE admins SET otp = ?, otp_expiry = ? WHERE mobile = ?', [otp, expiry, sanitizedMobile], (err) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ error: 'Server error' });
+    }
+
+    //**Whatsapp otp Send */
+    sendWhatsAppOTP();
+
+  return res.status(200).json({ message: `OTP sent successfully` });
+});
+});
+
+/**
+ * @swagger
+ * /api/validate-otp:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Verify user/admin OTP
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               mobile:
+ *                 type: string
+ *               otp:
+ *                 type: string
+ *             required:
+ *               - mobile
+ *               - otp
+ *     responses:
+ *       200:
+ *         description: User / Admin  logged in successfully
+ *       400:
+ *         description: Invalid input or duplicate mobile
+ *       500:
+ *         description: Server error
+ */
+app.post('/api/validate-otp', (req: Request, res: Response) => {
+  const { mobile, otp } = req.body;
+  const sanitizedMobile = sanitizePhoneNumber(mobile);
+  // Validate input
+  if (!mobile) {
+    return res.status(400).json({ error: 'Mobile number is required' });
+  }
+  if (!otp) {
+    return res.status(400).json({ error: 'OTP is required' });
+  }
+
+  db.query('SELECT * FROM admins WHERE mobile = ? AND otp = ?', [sanitizedMobile, otp], (err, results: any[]) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ error: 'Server error' });
+    }
+
+    if (!results || results.length === 0) {
+      return res.status(400).json({ error: 'Invalid mobile number or OTP' });
+    }
+
+
+  //Clear OTP
+  db.query('UPDATE admins SET otp = NULL, otp_expiry = NULL WHERE mobile = ?', [sanitizedMobile], (err) => {
+    if(err) {
+      console.error('Error clearing OTP:', err);
+      return res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  // OTP is valid, proceed with login
+  return res.status(200).json({ message: `${results[0].role} : ${results[0].username} logged in successfully` });
+  });
+});
+
+
+
 
 
 /** Start server */
