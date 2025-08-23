@@ -2,13 +2,13 @@ import express, { Request, Response, NextFunction } from 'express';
 import mysql, { Connection } from 'mysql2';
 import axios from 'axios';
 import cors from 'cors';
-import * as dns from 'dns/promises';
+// import * as dns from 'dns/promises';
 import path from 'path';
-import { parse } from 'csv-parse';
-import ExcelJS from 'exceljs';
-import PDFDocument from 'pdfkit';
-import fs from 'fs';
-import { fileURLToPath, Url } from 'url';
+// import { parse } from 'csv-parse';
+// import ExcelJS from 'exceljs';
+// import PDFDocument from 'pdfkit';
+// import fs from 'fs';
+// import { fileURLToPath, Url } from 'url';
 import 'dotenv/config';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
@@ -101,32 +101,32 @@ const mobile_validate = (mobile: string): boolean => {
 /* The `// Retry logic for API requests` section in the code is implementing a retry mechanism for
 making API requests. This mechanism allows the code to retry sending an API request a specified
 number of times if the initial request fails. */
-const sendWithRetry = async (
-  url: string,
-  payload: any,
-  headers: any,
-  retries: number = 3,
-  delay: number = 1000
-): Promise<{ success: boolean; data?: any; status?: number; error?: any }> => {
-  let lastError: any = null;
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await axios.post(url, payload, { headers });
-      return { success: true, data: response.data, status: response.status };
-    } catch (err) {
-      lastError = err;
-      console.error(`Attempt ${i + 1} failed:`, {
-        message: (err as Error).message,
-        code: (err as any).code,
-        response: (err as any).response?.data,
-        status: (err as any).response?.status,
-        headers: (err as any).response?.headers,
-      });
-      if (i < retries - 1) await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
-  return { success: false, error: lastError };
-};
+// const sendWithRetry = async (
+//   url: string,
+//   payload: any,
+//   headers: any,
+//   retries: number = 3,
+//   delay: number = 1000
+// ): Promise<{ success: boolean; data?: any; status?: number; error?: any }> => {
+//   let lastError: any = null;
+//   for (let i = 0; i < retries; i++) {
+//     try {
+//       const response = await axios.post(url, payload, { headers });
+//       return { success: true, data: response.data, status: response.status };
+//     } catch (err) {
+//       lastError = err;
+//       console.error(`Attempt ${i + 1} failed:`, {
+//         message: (err as Error).message,
+//         code: (err as any).code,
+//         response: (err as any).response?.data,
+//         status: (err as any).response?.status,
+//         headers: (err as any).response?.headers,
+//       });
+//       if (i < retries - 1) await new Promise((resolve) => setTimeout(resolve, delay));
+//     }
+//   }
+//   return { success: false, error: lastError };
+// };
 
 
 /* The code snippet you provided is defining a POST endpoint `/api/register` in the Express
@@ -248,6 +248,7 @@ app.post('/api/Login', (req: Request, res: Response) => {
                   ],
                 }
       });
+
       console.log('WhatsApp API response:', response.data);
     } catch (error) {
       console.error('WhatsApp API error:', error);
@@ -326,13 +327,187 @@ app.post('/api/validate-otp', (req: Request, res: Response) => {
     }
   });
 
+
+  //Update Status of User / Admin
+  db.query('UPDATE admins SET is_verified = ? WHERE mobile = ?', [1, sanitizedMobile], (err) => {
+    if (err) {
+      console.error('Error updating status:', err);
+      return res.status(500).json({ error: 'Server error' });
+    }
+  });
+
   // OTP is valid, proceed with login
   return res.status(200).json({ message: `${results[0].role} : ${results[0].username} logged in successfully` });
   });
 });
 
+/**
+ * @swagger
+ * /api/view-members:
+ *   get:
+ *     summary: Get all members
+ *     tags: [Members]
+ *     responses:
+ *       200:
+ *         description: List of all members
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ */
+app.get('/api/view-members', (req: Request, res: Response) => {
+  // Handle GET request for member registration
+  db.query('SELECT * FROM users', (err, results: any[]) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ error: 'Server error' });
+    }
+
+    return res.status(200).json({ members: results });
+  });
+});
 
 
+/**
+ * @swagger
+ * /api/Register-Member:
+ *   post:
+ *     tags: [Members]
+ *     summary: Register a new member
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               mobile:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *               parents_name:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *               education_qualification:
+ *                 type: string
+ *               caste:
+ *                 type: string
+ *               joining_details:
+ *                 type: string
+ *               party_member_number:
+ *                 type: string
+ *               voter_id:
+ *                 type: string
+ *               aadhar_number:
+ *                 type: string
+ *               image:
+ *                 type: string
+ *               dname:
+ *                 type: string
+ *               tname:
+ *                 type: string
+ *               jname:
+ *                 type: string
+ *             required:
+ *               - mobile
+ *               - name
+ *               - parents_name
+ *               - address
+ *               - education_qualification
+ *               - caste
+ *               - joining_details
+ *               - party_member_number
+ *               - voter_id
+ *               - aadhar_number
+ *               - image
+ *               - dname
+ *               - tname
+ *               - jname
+ *     responses:
+ *       200:
+ *         description: Members registered successfully
+ *       400:
+ *         description: Invalid input or duplicate Member
+ *       500:
+ *         description: Server error
+ */
+
+app.post('/api/Register-Member', (req: Request, res: Response) => {
+  const { mobile, 
+          name, 
+          parents_name, 
+          address, 
+          education_qualification, 
+          caste, 
+          joining_details, 
+          party_member_number, 
+          voter_id, 
+          aadhar_number, 
+          image, 
+          dname, 
+          tname, 
+          jname} = req.body;
+
+  const imageData = image ? image.replace(/^data:image\/\w+;base64,/, '') : null; // Remove data URL prefix if present
+  //** Validate input */
+  if (!mobile) {
+    return res.status(400).json({ error: 'Mobile number is required' });
+  }
+  if(!name) {
+    return res.status(400).json({ error: 'Name is required' });
+  }
+
+  if(!parents_name) {
+    return res.status(400).json({ error: 'Parents name is required' });
+  }
+  if(!address) {
+    return res.status(400).json({ error: 'Address is required' });
+  }
+  if(!education_qualification) {
+    return res.status(400).json({ error: 'Education qualification is required' });
+  }
+  if(!caste) {
+    return res.status(400).json({ error: 'Caste is required' });
+  }
+  if(!joining_details) {
+    return res.status(400).json({ error: 'Joining details are required' });
+  }
+  if(!party_member_number) {
+    return res.status(400).json({ error: 'Party member number is required' });
+  }
+  if(!voter_id) {
+    return res.status(400).json({ error: 'Voter ID is required' });
+  }
+  if(!aadhar_number) {
+    return res.status(400).json({ error: 'Aadhar number is required' });
+  }
+  if(!image) {
+    return res.status(400).json({ error: 'Image is required' });
+  }
+  if(!dname) {
+    return res.status(400).json({ error: 'District name is required' });
+  }
+  if(!tname) {
+    return res.status(400).json({ error: 'Taluk name is required' });
+  }
+  if(!jname) {
+    return res.status(400).json({ error: 'Jurisdiction name is required' });
+  }
+
+
+  //** Query for Insert into DB */
+  
+  db.query(`INSERT INTO users (mobile, name, parents_name, address, education_qualification, caste, joining_details, party_member_number, voter_id, aadhar_number, image, tname, dname, jname) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [mobile, name, parents_name, address, education_qualification, caste, joining_details, party_member_number, voter_id, aadhar_number, imageData, dname, tname, jname ], (err) => {
+
+    if (err) {
+      console.error('Error inserting data:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+
+  return res.status(200).json({ message: `${name} Member registered successfully` });
+  });
+});
 
 
 /** Start server */
