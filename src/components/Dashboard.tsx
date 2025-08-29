@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { apiService, Member, positions } from '@/services/api';
+import { apiService, Member, Admins } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 
 interface DashboardProps {
@@ -108,24 +108,24 @@ export function Dashboard({ onAddMember, onViewCalendar }: DashboardProps) {
     setFilteredMembers(filtered);
   };
 
-  const handleDeleteMember = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this member?')) return;
+  // const handleDeleteMember = async (id: number) => {
+  //   if (!confirm('Are you sure you want to delete this member?')) return;
 
-    try {
-      await apiService.deleteMember(id);
-      setMembers(members.filter(m => m.id !== id));
-      toast({
-        title: "Success",
-        description: "Member deleted successfully",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete member",
-        variant: "destructive",
-      });
-    }
-  };
+  //   try {
+  //     await apiService.deleteMember(id);
+  //     setMembers(members.filter(m => m.id !== id));
+  //     toast({
+  //       title: "Success",
+  //       description: "Member deleted successfully",
+  //     });
+  //   } catch (error) {
+  //     toast({
+  //       title: "Error",
+  //       description: "Failed to delete member",
+  //       variant: "destructive",
+  //     });
+  //   }
+  // };
 
   const stats = [
     {
@@ -230,11 +230,11 @@ export function Dashboard({ onAddMember, onViewCalendar }: DashboardProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Positions</SelectItem>
-                  {positions.map((position) => (
+                  {/* {positions.map((position) => (
                     <SelectItem key={position} value={position}>
                       {position}
                     </SelectItem>
-                  ))}
+                  ))} */}
                 </SelectContent>
               </Select>
             </div>
@@ -314,7 +314,7 @@ export function Dashboard({ onAddMember, onViewCalendar }: DashboardProps) {
                             size="sm" 
                             variant="outline" 
                             className="p-2 text-destructive hover:text-destructive"
-                            onClick={() => member.id && handleDeleteMember(member.id)}
+                            // onClick={() => member.id && handleDeleteMember(member.id)}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>

@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { apiService, Member, positions } from '@/services/api';
+import { apiService, Member, Admins } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 
 interface AddMemberFormProps {
@@ -94,12 +94,12 @@ export function AddMemberForm({ onBack, onMemberAdded }: AddMemberFormProps) {
 
     setIsLoading(true);
     try {
-      await apiService.createMember(formData);
-      toast({
-        title: "Success",
-        description: "Member added successfully!",
-      });
-      onMemberAdded();
+      // await apiService.createMember(formData);
+      // toast({
+      //   title: "Success",
+      //   description: "Member added successfully!",
+      // });
+      // onMemberAdded();
     } catch (error) {
       toast({
         title: "Error",
@@ -230,11 +230,11 @@ export function AddMemberForm({ onBack, onMemberAdded }: AddMemberFormProps) {
                     <SelectValue placeholder="Select position" />
                   </SelectTrigger>
                   <SelectContent>
-                    {positions.map((position) => (
+                    {/* {positions.map((position) => (
                       <SelectItem key={position} value={position}>
                         {position}
                       </SelectItem>
-                    ))}
+                    ))} */}
                   </SelectContent>
                 </Select>
               </div>

@@ -510,6 +510,26 @@ app.post('/api/Register-Member', (req: Request, res: Response) => {
 });
 
 
+
+app.post('/api/update-member', (req: Request, res: Response) => {
+  const { id, mobile, name, parents_name, address, education_qualification, caste, joining_details, party_member_number, voter_id, aadhar_number, image, dname, tname, jname } = req.body;
+
+  // Validate input
+  if (!id) {
+    return res.status(400).json({ error: 'ID is required' });
+  }
+
+  // Update query
+  db.query(`UPDATE users SET mobile = ?, name = ?, parents_name = ?, address = ?, education_qualification = ?, caste = ?, joining_details = ?, party_member_number = ?, voter_id = ?, aadhar_number = ?, image = ?, tname = ?, dname = ?, jname = ? WHERE id = ?`, [mobile, name, parents_name, address, education_qualification, caste, joining_details, party_member_number, voter_id, aadhar_number, image, dname, tname, jname, id], (err) => {
+    if (err) {
+      console.error('Error updating data:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+
+    return res.status(200).json({ message: `Member with ID ${id} updated successfully` });
+  });
+});
+
 /** Start server */
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
