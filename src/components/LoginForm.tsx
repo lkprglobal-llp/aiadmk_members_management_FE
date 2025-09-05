@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { on } from 'events';
+import { Admins } from '@/services/api';
 
 interface LoginFormProps {
   onLogin: (mobile: string, otp?: string) => Promise<void>;
@@ -12,6 +14,7 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ onLogin, onSwitchToRegister }: LoginFormProps) {
+  const [currentPage, setCurrentPage] = useState('');
   const [mobile, setMobile] = useState('');
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState<'mobile' | 'otp'>('mobile'); // step control
@@ -67,9 +70,8 @@ export function LoginForm({ onLogin, onSwitchToRegister }: LoginFormProps) {
       await onLogin(mobile, otp);
       toast({
         title: "Success",
-        description: "Login successful! Redirecting to dashboard...",
+        description: "Login successful!",
       });
-      // after success -> parent Index.tsx will set dashboard
     } catch (error) {
       toast({
         title: "Error",

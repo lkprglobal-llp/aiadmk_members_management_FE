@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LoginForm } from "./LoginForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { set } from "date-fns";
+import { Admins } from "@/services/api";
 interface RegisterFormProps {
   onRegister: (name: string, mobile: string, role: string) => Promise<void>;
   onSwitchToLogin: () => void;
@@ -59,7 +60,7 @@ export function RegisterForm({ onRegister, onSwitchToLogin }: RegisterFormProps)
     try {
       await onRegister(username, mobile, role);
       if (username != null && mobile != null) {
-        setUserName(username);
+        onSwitchToLogin();
       }
       toast({
         title: "Success",
@@ -74,22 +75,18 @@ export function RegisterForm({ onRegister, onSwitchToLogin }: RegisterFormProps)
       console.log("Registration error:", error);
     } finally {
       setIsLoading(false);
-      setUserName(''); // Clear username field after submission
-      setMobile('');
-      setRole('');
-      setCurrentPage('login'); // Switch to login page after registration
     }
   };
 
   // Placeholder: In a real app, this should be passed as a prop or handled via context/router.
-  function setCurrentPage(page: string): void {
-    // For demonstration, just show a toast.
-    toast({
-      title: "Navigation",
-      description: `Would navigate to "${page}" page.`,
-    });
-    // In a real app, you would use a router to navigate.
-  }
+  // function setCurrentPage(page: string): void {
+  //   // For demonstration, just show a toast.
+  //   toast({
+  //     title: "Navigation",
+  //     description: `Would navigate to "${page}" page.`,
+  //   });
+  //   // In a real app, you would use a router to navigate.
+  // }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10">
