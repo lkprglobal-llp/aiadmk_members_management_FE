@@ -118,7 +118,7 @@ const Index = () => {
   const handleVerifyOtp = async (mobile: string, otp: string): Promise<ApiResponse<Admins>> => {
     try {
       const response = await apiService.validateOtp(mobile, otp);
-      console.log("handleVerifyOtp response:", response);
+      // console.log("handleVerifyOtp response:", response);
 
       if (!response.success || !response.user || !response.token) {
         return {
@@ -129,9 +129,6 @@ const Index = () => {
 
       // Store token in localStorage
       localStorage.setItem("authToken", response.token);
-      // Optionally store user data
-      // localStorage.setItem("user", JSON.stringify(response.user));
-      setCurrentPage("dashboard");
 
       return {
         success: true,
@@ -161,7 +158,7 @@ const Index = () => {
 
   const handleLogout = async () => {
     try {
-      await apiService.logout();
+      // await apiService.logout();
       localStorage.removeItem('authToken');
       setUserName(null);
       setCurrentPage('login');

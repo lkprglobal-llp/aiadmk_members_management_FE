@@ -68,6 +68,7 @@ export function LoginForm({ onLogin, onSwitchToRegister }: LoginFormProps) {
     try {
       // Step 2: verify OTP
       await onLogin(mobile, otp);
+      // setCurrentPage('dashboard')
       toast({
         title: "Success",
         description: "Login successful!",
@@ -79,24 +80,26 @@ export function LoginForm({ onLogin, onSwitchToRegister }: LoginFormProps) {
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      setIsLoading(true);
     }
+    setCurrentPage("dashboard")
+    window.location.reload();
   };
 
   return (
-     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10">
       <div className="w-full max-w-md p-6 animate-fade-in">
         <Card className="card-gradient border-0 shadow-[var(--shadow-primary)]">
           <CardHeader className="text-center space-y-4">
             <div className="w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-full mx-auto flex items-center justify-center animate-glow">
-              <img src="../../public/aiadmk_logo.png" alt="AIADMK Logo" className="w-12 h-12" />
+              <img src="../../public/images/aiadmk_logo.png" alt="AIADMK Logo" className="w-12 h-12" />
             </div>
             <CardTitle className="text-2xl font-bold text-foreground">
               AIADMK Admin Portal
             </CardTitle>
             <CardDescription className="text-muted-foreground">
-              {step === 'mobile' 
-                ? "Sign in with your mobile number" 
+              {step === 'mobile'
+                ? "Sign in with your mobile number"
                 : "Enter the OTP sent to your mobile"}
             </CardDescription>
           </CardHeader>

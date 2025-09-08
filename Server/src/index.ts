@@ -6,6 +6,9 @@ import path from "path";
 import "dotenv/config";
 import swaggerUi from "swagger-ui-express";
 import swaggerJsdoc from "swagger-jsdoc";
+import fs from "fs";
+import multer, { FileFilterCallback } from "multer";
+import ExcelJS from "exceljs";
 
 //** Swagger definition for API Calls*/
 const options = {
@@ -48,49 +51,19 @@ const port = process.env.PORT || 5253; // Include the port variable in .env, if 
 app.use(
   cors({
     origin: ["http://localhost:5253", "http://localhost:8080"],
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
 app.use(express.json({ limit: "50mb" }));
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
-
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use(body_parser.json());
 
 //** OTP Store and Token generations */
 // JWT secret (store in environment variables in production)
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
-
-// // Interface for user data (matches frontend Admins)
-// interface Admin {
-//   id: number;
-//   username: string;
-//   mobile: string;
-//   role: string;
-// }
-
-// // Interface for member data (matches frontend Member)
-// interface Member {
-//   id?: number;
-//   mobile: string;
-//   name: string;
-//   parents_name: string;
-//   address: string;
-//   education_qualification: string;
-//   caste: string;
-//   joining_details: string;
-//   party_member_number: string;
-//   voter_id: string;
-//   aadhar_number: string;
-//   image?: string;
-//   position: string;
-//   created_at?: string;
-//   updated_at?: string;
-//   jname: string;
-//   tname: string;
-//   dname: string;
-// }
 
 // Define types (add to types.ts or server.ts)
 interface TeamRow extends RowDataPacket {
@@ -208,6 +181,34 @@ const mobile_validate = (mobile: string): boolean => {
   return mobileRegex.test(mobile);
 };
 
+// upload configuration
+// Create uploads folder if not exists
+const uploadDir = path.join(__dirname, "uploads/members");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Configure multer storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
+  },
+});
+
+const upload = multer({ storage });
+// const storage = multer.diskStorage({
+//   destination: (req, file, cb) => {
+//     cb(null, uploadDir);
+//   },
+//   filename: (req, file, cb) => {
+//     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+//     cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
+//   },
+// });
+
+// const upload = multer({ storage });
 /* The `// Retry logic for API requests` section in the code is implementing a retry mechanism for
 making API requests. This mechanism allows the code to retry sending an API request a specified
 number of times if the initial request fails. */
@@ -655,11 +656,11 @@ app.get(
   }
 );
 
-app.post("/api/logout", (req: Request, res: Response) => {
-  // Handle logout logic (e.g., invalidate session, token, etc.)
-  localStorage.removeItem("authToken");
-  return res.status(200).json({ message: "Logged out successfully" });
-});
+// app.post("/api/logout", (req: Request, res: Response) => {
+//   // Handle logout logic (e.g., invalidate session, token, etc.)
+//   localStorage.removeItem("authToken");
+//   return res.status(200).json({ message: "Logged out successfully" });
+// });
 
 /**
  * @swagger
@@ -688,17 +689,19 @@ app.get(
     }
     try {
       const [rows] = await db?.execute<RowDataPacket[]>(
-        "SELECT id, mobile, name, parents_name, address, education_qualification, caste, joining_details, party_member_number, voter_id, aadhar_number, image, created_at, tname, dname, jname FROM users"
+        "SELECT id, mobile, name, date_of_birth, parents_name, address, education_qualification, caste, DATE_FORMAT(joining_date, '%Y-%m-%d') as joining_date, joining_details, party_member_number, voter_id, aadhar_number, image, created_at, tname, dname, jname FROM users"
       );
       const members: any = rows.map((row) => ({
         id: row.id,
         name: row.name,
+        date_of_birth: row.date_of_birth,
         mobile: row.mobile,
         parents_name: row.parents_name,
         address: row.address,
         education_qualification: row.education_qualification,
         caste: row.caste,
         party_member_number: row.party_member_number,
+        joining_date: row.joining_date,
         joining_details: row.joining_details,
         voter_id: row.voter_id,
         aadhar_number: row.aadhar_number,
@@ -709,6 +712,7 @@ app.get(
         tname: row.tname,
         dname: row.dname,
       }));
+      // console.log(members);
       res.json({ success: true, members, count: members.length });
     } catch (error) {
       console.error("Get members error:", error);
@@ -781,117 +785,223 @@ app.get(
  *         description: Server error
  */
 
-app.post("/api/Register-Member", async (req: Request, res: Response) => {
-  const {
-    mobile,
-    name,
-    parents_name,
-    address,
-    education_qualification,
-    caste,
-    joining_details,
-    party_member_number,
-    voter_id,
-    aadhar_number,
-    image,
-    dname,
-    tname,
-    jname,
-  } = req.body;
+// app.post("/api/Register-Member", async (req: Request, res: Response) => {
+//   const {
+//     mobile,
+//     name,
+//     date_of_birth,
+//     parents_name,
+//     address,
+//     education_qualification,
+//     caste,
+//     joining_date,
+//     joining_details,
+//     party_member_number,
+//     voter_id,
+//     aadhar_number,
+//     image,
+//     dname,
+//     tname,
+//     jname,
+//   } = req.body;
 
-  const imageData = image
-    ? image.replace(/^data:image\/\w+;base64,/, "")
-    : null; // Remove data URL prefix if present
-  //** Validate input */
-  if (!mobile) {
-    return res.status(400).json({ error: "Mobile number is required" });
-  }
-  if (!name) {
-    return res.status(400).json({ error: "Name is required" });
-  }
+//   console.log(mobile);
+//   const imageData = image
+//     ? image.replace(/^data:image\/\w+;base64,/, "")
+//     : null; // Remove data URL prefix if present
+//   //** Validate input */
+//   if (!mobile) {
+//     return res.status(400).json({ error: "Mobile number is required" });
+//   }
+//   if (!name) {
+//     return res.status(400).json({ error: "Name is required" });
+//   }
 
-  if (!parents_name) {
-    return res.status(400).json({ error: "Parents name is required" });
-  }
-  if (!address) {
-    return res.status(400).json({ error: "Address is required" });
-  }
-  if (!education_qualification) {
-    return res
-      .status(400)
-      .json({ error: "Education qualification is required" });
-  }
-  if (!caste) {
-    return res.status(400).json({ error: "Caste is required" });
-  }
-  if (!joining_details) {
-    return res.status(400).json({ error: "Joining details are required" });
-  }
-  if (!party_member_number) {
-    return res.status(400).json({ error: "Party member number is required" });
-  }
-  if (!voter_id) {
-    return res.status(400).json({ error: "Voter ID is required" });
-  }
-  if (!aadhar_number) {
-    return res.status(400).json({ error: "Aadhar number is required" });
-  }
-  if (!image) {
-    return res.status(400).json({ error: "Image is required" });
-  }
-  if (!dname) {
-    return res.status(400).json({ error: "District name is required" });
-  }
-  if (!tname) {
-    return res.status(400).json({ error: "Taluk name is required" });
-  }
-  if (!jname) {
-    return res.status(400).json({ error: "Jurisdiction name is required" });
-  }
+//   if (!parents_name) {
+//     return res.status(400).json({ error: "Parents name is required" });
+//   }
+//   if (!date_of_birth) {
+//     return res.status(400).json({ error: "Date of Birth is required" });
+//   }
+//   if (!address) {
+//     return res.status(400).json({ error: "Address is required" });
+//   }
+//   if (!education_qualification) {
+//     return res
+//       .status(400)
+//       .json({ error: "Education qualification is required" });
+//   }
+//   if (!caste) {
+//     return res.status(400).json({ error: "Caste is required" });
+//   }
+//   if (!joining_date) {
+//     return res.status(400).json({ error: "Joining date are required" });
+//   }
+//   if (!joining_details) {
+//     return res.status(400).json({ error: "Joining details are required" });
+//   }
+//   if (!party_member_number) {
+//     return res.status(400).json({ error: "Party member number is required" });
+//   }
+//   if (!voter_id) {
+//     return res.status(400).json({ error: "Voter ID is required" });
+//   }
+//   if (!aadhar_number) {
+//     return res.status(400).json({ error: "Aadhar number is required" });
+//   }
+//   if (!image) {
+//     return res.status(400).json({ error: "Image is required" });
+//   }
+//   if (!dname) {
+//     return res.status(400).json({ error: "District name is required" });
+//   }
+//   if (!tname) {
+//     return res.status(400).json({ error: "Taluk name is required" });
+//   }
+//   if (!jname) {
+//     return res.status(400).json({ error: "Jurisdiction name is required" });
+//   }
 
-  //** Query for Insert into DB */
+//   //** Query for Insert into DB */
 
-  try {
-    const [result]: any = await db?.execute(
-      `INSERT INTO users (mobile, name, parents_name, address, education_qualification, caste, joining_details, party_member_number, voter_id, aadhar_number, image, tname, dname, jname) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        mobile,
-        name,
-        parents_name,
-        address,
-        education_qualification,
-        caste,
-        joining_details,
-        party_member_number,
-        voter_id,
-        aadhar_number,
-        imageData,
-        dname,
-        tname,
-        jname,
-      ]
-    );
-    const insertId = result.insertId;
-    res.json({
-      success: true,
-      member: {
-        id: insertId,
-        name,
-        mobile,
-        party_member_number,
-        tname,
-        dname,
-        jname,
-        parents_name,
-        created_at: new Date().toISOString(),
-      },
-      message: "Member added successfully",
-    });
-  } catch (error) {
-    console.error("Error inserting data:", error);
-    return res.status(500).json({ error: "Internal server error" });
+//   try {
+//     const [result]: any = await db?.execute(
+//       `INSERT INTO users (mobile, name, date_of_birth, parents_name, address, education_qualification, caste, joining_date, joining_details, party_member_number, voter_id, aadhar_number, image, tname, dname, jname) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+//       [
+//         mobile,
+//         name,
+//         date_of_birth,
+//         parents_name,
+//         address,
+//         education_qualification,
+//         caste,
+//         joining_date,
+//         joining_details,
+//         party_member_number,
+//         voter_id,
+//         aadhar_number,
+//         imageData,
+//         dname,
+//         tname,
+//         jname,
+//       ]
+//     );
+//     const insertId = result.insertId;
+//     console.log("index.ts", result);
+//     return res.json({
+//       success: true,
+//       member: {
+//         id: insertId,
+//         name,
+//         mobile,
+//         party_member_number,
+//         tname,
+//         dname,
+//         jname,
+//         parents_name,
+//         created_at: new Date().toISOString(),
+//       },
+//       message: "Member added successfully",
+//     });
+//   } catch (error) {
+//     console.error("Error inserting data:", error);
+//     return res.status(500).json({ error: "Internal server error" });
+//   }
+// });
+app.post(
+  "/api/Register-Member/",
+  upload.single("image"),
+  async (req: Request, res: Response) => {
+    const {
+      mobile,
+      name,
+      date_of_birth,
+      parents_name,
+      address,
+      education_qualification,
+      caste,
+      joining_date,
+      joining_details,
+      party_member_number,
+      voter_id,
+      aadhar_number,
+      image,
+      dname,
+      tname,
+      jname,
+    } = req.body;
+
+    const id = crypto.randomUUID();
+
+    if (!mobile) {
+      return res.status(400).json({ error: "Mobile is required" });
+    }
+
+    try {
+      // 1. Get current member
+      const [rows]: any = await db?.execute(
+        "SELECT * FROM users WHERE mobile = ?",
+        [mobile]
+      );
+
+      if (rows.length != 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Member Already Registered" });
+      }
+
+      // Insert member
+      const [result]: any = await db?.execute(
+        `INSERT INTO users (id, mobile, name, date_of_birth, parents_name, address, education_qualification, caste, joining_date, joining_details, party_member_number, voter_id, aadhar_number, image, tname, dname, jname) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          mobile || null,
+          name || null,
+          date_of_birth || null,
+          parents_name || null,
+          address || null,
+          education_qualification || null,
+          caste || null,
+          joining_date || null,
+          joining_details || null,
+          party_member_number || null,
+          voter_id || null,
+          aadhar_number || null,
+          image || null,
+          tname || null,
+          dname || null,
+          jname || null,
+        ]
+      );
+
+      if (result.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Member not found" });
+      }
+
+      // 5. Return updated member
+      return res.json({
+        success: true,
+        member: {
+          image,
+          name,
+          mobile,
+          joining_date,
+          party_member_number,
+          dname,
+          tname,
+          jname,
+          parents_name,
+        },
+        message: "Member Added successfully",
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: "Internal server error" });
+    }
   }
-});
+);
 
 /**
  * @swagger
@@ -966,92 +1076,140 @@ app.post("/api/Register-Member", async (req: Request, res: Response) => {
  *       500:
  *         description: Server error
  */
-app.post("/api/update-member/:id", async (req: Request, res: Response) => {
-  const {
-    mobile,
-    name,
-    parents_name,
-    address,
-    education_qualification,
-    caste,
-    joining_details,
-    party_member_number,
-    voter_id,
-    aadhar_number,
-    image,
-    dname,
-    tname,
-    jname,
-  } = req.body;
+app.put(
+  "/api/update-member/:id",
+  upload.single("image"),
+  async (req: Request, res: Response) => {
+    const {
+      mobile,
+      name,
+      date_of_birth,
+      parents_name,
+      address,
+      education_qualification,
+      caste,
+      joining_date,
+      joining_details,
+      party_member_number,
+      voter_id,
+      aadhar_number,
+      dname,
+      tname,
+      jname,
+    } = req.body;
 
-  const id = req.params.id;
+    const id = req.params.id;
 
-  // Validate input
-  if (!id) {
-    return res.status(400).json({ error: "ID is required" });
-  }
+    if (!id) {
+      return res.status(400).json({ error: "ID is required" });
+    }
 
-  try {
-    const [existingMembers]: any = await db?.execute(
-      `SELECT * FROM users WHERE (mobile = ? OR party_member_number = ?) AND id != ?`,
-      [mobile, party_member_number, id]
-    );
+    try {
+      // 1. Get current member
+      const [rows]: any = await db?.execute(
+        "SELECT * FROM users WHERE id = ?",
+        [id]
+      );
 
-    if (existingMembers.length > 0) {
-      res.status(400).json({
-        success: false,
-        message:
-          "Another member with this mobile or party member number already exists",
+      if (!rows || rows.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Member not found" });
+      }
+
+      const currentMember = rows[0];
+      const oldImage = currentMember.image;
+
+      // 2. Decide which image to use
+      let finalImage = oldImage;
+      if (req.file) {
+        finalImage = `uploads/members/${req.file.filename}`;
+
+        // delete old file if it exists
+        if (oldImage && oldImage !== finalImage) {
+          const oldPath = path.join(__dirname, "..", oldImage);
+          fs.unlink(oldPath, (err) => {
+            if (err) console.warn("Failed to delete old image:", err);
+          });
+        }
+      }
+
+      // 3. Uniqueness check
+      const [existingMembers]: any = await db?.execute(
+        `SELECT * FROM users WHERE (mobile = ? OR party_member_number = ?) AND id != ?`,
+        [mobile, party_member_number, id]
+      );
+
+      if (existingMembers.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Another member with this mobile or party member number already exists",
+        });
+      }
+
+      // 4. Update member
+      const [result]: any = await db?.execute(
+        `UPDATE users 
+         SET mobile = ?, name = ?, date_of_birth = ?, parents_name = ?, address = ?, 
+             education_qualification = ?, caste = ?, joining_date = ?, 
+             joining_details = ?, party_member_number = ?, voter_id = ?, 
+             aadhar_number = ?, image = ?, tname = ?, dname = ?, jname = ? 
+         WHERE id = ?`,
+        [
+          mobile || null,
+          name || null,
+          date_of_birth || null,
+          parents_name || null,
+          address || null,
+          education_qualification || null,
+          caste || null,
+          joining_date || null,
+          joining_details || null,
+          party_member_number || null,
+          voter_id || null,
+          aadhar_number || null,
+          finalImage || null,
+          tname || null,
+          dname || null,
+          jname || null,
+          id,
+        ]
+      );
+
+      if (result.affectedRows === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Member not found" });
+      }
+
+      // 5. Return updated member
+      res.json({
+        success: true,
+        member: {
+          id: parseInt(id),
+          image: finalImage,
+          name,
+          mobile,
+          joining_date,
+          party_member_number,
+          dname,
+          tname,
+          jname,
+          parents_name,
+        },
+        message: "Member updated successfully",
       });
-      return;
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: "Internal server error" });
     }
-
-    const [result]: any = await db?.execute(
-      `UPDATE users SET mobile = ?, name = ?, parents_name = ?, address = ?, education_qualification = ?, caste = ?, joining_details = ?, party_member_number = ?, voter_id = ?, aadhar_number = ?, image = ?, tname = ?, dname = ?, jname = ? WHERE id = ?`,
-      [
-        mobile,
-        name,
-        parents_name,
-        address,
-        education_qualification,
-        caste,
-        joining_details,
-        party_member_number,
-        voter_id,
-        aadhar_number,
-        image,
-        dname,
-        tname,
-        jname,
-        id,
-      ]
-    );
-    if ((result as any).affectedRows === 0) {
-      res.status(404).json({ success: false, message: "Member not found" });
-      return;
-    }
-    res.json({
-      success: true,
-      member: {
-        id: parseInt(id),
-        name,
-        mobile,
-        party_member_number,
-        dname,
-        tname,
-        jname,
-        parents_name,
-      },
-      message: "Member updated successfully",
-    });
-  } catch {
-    return res.status(500).json({ error: "Internal server error" });
   }
-});
+);
 
 /**
  * @swagger
- * /api/Delete-Member/{id}:
+ * /api/delete-member/{id}:
  *   post:
  *     tags: [Members]
  *     summary: Delete an existing member
@@ -1072,18 +1230,49 @@ app.post("/api/update-member/:id", async (req: Request, res: Response) => {
  *       500:
  *         description: Server error
  */
-app.post("/api/delete-member/:id", async (req: Request, res: Response) => {
+
+app.delete("/api/delete-member/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
-  if (!db) {
-    res.status(500).json({ success: false, message: "Database not connected" });
-    return;
+  const memberId = parseInt(id);
+
+  if (isNaN(memberId)) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid member id" });
   }
+
   try {
-    const [result] = await db.execute("DELETE FROM members WHERE id = ?", [id]);
-    if ((result as any).affectedRows === 0) {
-      res.status(404).json({ success: false, message: "Member not found" });
-      return;
+    // Fetch existing member first to delete the image file
+    const [rows]: any = await db?.execute(
+      "SELECT image FROM users WHERE id = ?",
+      [memberId]
+    );
+    const member = rows[0];
+    if (!member) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Member not found" });
     }
+
+    // Delete image file from disk
+    if (member.image) {
+      const imagePath = path.join(__dirname, "../", member.image); // adjust path
+      fs.unlink(imagePath, (err) => {
+        if (err) console.warn("Failed to delete image file:", err);
+      });
+    }
+
+    // Delete from DB
+    const result = await db?.execute("DELETE FROM users WHERE id = ?", [
+      memberId,
+    ]);
+
+    if ((result as any).affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Member not found" });
+    }
+
     res.json({ success: true, message: "Member deleted successfully" });
   } catch (error) {
     console.error("Delete member error:", error);
@@ -1130,170 +1319,101 @@ app.get(
     }
   }
 );
-// app.get(
-//   "/api/view-positions",
-//   authenticateToken,
-//   async (req: AuthRequest, res: Response): Promise<void> => {
-//     if (res.headersSent) {
-//       console.log("Headers already sent in /api/view-positions");
-//       return;
-//     }
 
-//     try {
-//       const results = await db?.execute<TeamRow[]>(
-//         "SELECT DISTINCT tcode, dcode, jcode AS value, tname, dname, jname AS name FROM teams"
-//       );
-//       const resultraw = results;
-//       const resultPosition = resultraw
-//         .map((row) => {
-//           // Determine the primary name field (default to jname if others are null/undefined)
-//           const primaryKey = row
-//             ? "jname"
-//             : row.dcode
-//             ? "dname"
-//             : row.tcode
-//             ? "tname"
-//             : "jname";
-//           const primaryName = row[primaryKey] || "Unknown Position";
+/**
+ * @swagger
+ * /api/export-members:
+ *   get:
+ *     summary: export all members
+ *     tags: [Members]
+ *     responses:
+ *       200:
+ *         description: export members
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ */
+// ✅ Export all members
+app.get("/api/export/members", async (req: Request, res: Response) => {
+  try {
+    const [rows]: any = await db?.execute("SELECT * FROM users");
 
-//           // Assign category based on available data
-//           const category = row.jcode
-//             ? "paasrai"
-//             : row.tcode
-//             ? "ondriyam"
-//             : "general";
+    if (!rows.length) {
+      return res
+        .status(404)
+        .json({ success: false, message: "No members found" });
+    }
+    const fields = Object.keys(rows[0]);
+    const csv = [
+      fields.join(","), // header row
+      ...rows.map((row: any) =>
+        fields.map((f) => `"${row[f] ?? ""}"`).join(",")
+      ),
+    ].join("\n");
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=all_members.csv"
+    );
+    await res.send(csv);
+    res.end();
+  } catch (error) {
+    console.error("Export all members error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
 
-//           // Safe Tamil name mapping with fallback
-//           const tamilTranslations = {
-//             jname:
-//               row.jname === "position"
-//                 ? "பொறுப்பு"
-//                 : row.jname || "பதவி அறியப்படவில்லை",
-//             dname:
-//               row.dname === "district"
-//                 ? "மாவட்டம்"
-//                 : row.dname || "மாவட்டம் அறியப்படவில்லை",
-//             tname:
-//               row.tname === "team"
-//                 ? "குழு"
-//                 : row.tname || "குழு அறியப்படவில்லை",
-//           };
-//           const tamilName =
-//             tamilTranslations[primaryKey] || "பதவி அறியப்படவில்லை";
+/**
+ * @swagger
+ * /api/export-member:
+ *   get:
+ *     summary: export particular member
+ *     tags: [Members]
+ *     responses:
+ *       200:
+ *         description: export member
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ */
+// ✅ Export single member by ID
+app.get("/api/export/member/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
 
-//           return {
-//             jvalue: row.jcode,
-//             tvalue: row.tcode,
-//             dvalue: row.dcode,
-//             name: primaryName,
-//             category,
-//             tamilName,
-//           };
-//         })
-//         .filter(
-//           (
-//             pos
-//           ): pos is {
-//             jvalue: string;
-//             tvalue: string;
-//             dvalue: string;
-//             name: string;
-//             category: string;
-//             tamilName: string;
-//           } => pos.jvalue !== null && pos.name !== null
-//         );
+  try {
+    const [rows]: any = await db?.execute("SELECT * FROM users WHERE id = ?", [
+      id,
+    ]);
 
-//       res.json({ success: true, resultPosition });
-//     } catch (error) {
-//       console.error("Fetch positions error:", error);
-//       if (res.headersSent) {
-//         console.log("Headers already sent in /api/view-positions catch");
-//         return;
-//       }
-//       res.status(500).json({ success: false, message: "Server error" });
-//     }
-//   }
-// );
-// Define types (add to types.ts or server.ts)
+    if (!rows.length) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Member not found" });
+    }
 
-// app.get(
-//   "/api/view-positions",
-//   authenticateToken,
-//   async (req: AuthRequest, res: Response): Promise<void> => {
-//     if (res.headersSent) {
-//       console.log("Headers already sent in /api/view-positions");
-//       return;
-//     }
-//     if (!db) {
-//       res
-//         .status(500)
-//         .json({ success: false, message: "Database not connected" });
-//       return;
-//     }
-//     try {
-//       const [results] = await db.execute<RowDataPacket[]>(
-//         "SELECT DISTINCT tcode, dcode, jcode AS value, tname, dname, jname AS name FROM teams"
-//       );
-//       const positions: PositionResponse[] | any = results.map((row) => {
-//         const category = row.tname
-//           ? "அணி"
-//           : row.dname
-//           ? "ஒன்றியம்"
-//           : row.jname
-//           ? "பொறுப்பு"
-//           : "";
+    const member = rows[0];
+    const fields = Object.keys(member);
+    const csv = [
+      fields.join(","), // header row
+      ...rows.map((row: any) =>
+        fields.map((f) => `"${row[f] ?? ""}"`).join(",")
+      ),
+    ].join("\n");
 
-//         return res.json({
-//           tcode: row.tcode,
-//           dcode: row.dcode,
-//           jcode: row.jcode,
-//           tname: row.tname,
-//           dname: row.dname,
-//           jname: row.jname,
-//           category,
-//         });
-//       });
-// const positions: PositionResponse[] = results.map((row) => {
-//   // Assign category based on available data
-//   const category = row.jvalue
-//     ? "paasrai"
-//     : row.tvalue
-//     ? "ondriyam"
-//     : "general";
-
-//   // Safe Tamil name mapping with fallbacks
-//   const tamilName =
-//     row.name === "junior"
-//       ? "இளைஞர்"
-//       : row.name === "district"
-//       ? "மாவட்டம்"
-//       : row.name === "team"
-//       ? "குழு"
-//       : row.name || "பதவி அறியப்படவில்லை";
-
-//   return {
-//     tvalue: row.tvalue,
-//     dvalue: row.dvalue,
-//     value: row.value,
-//     tname: row.tname,
-//     dname: row.dname,
-//     name: row.name,
-//     category,
-//     tamilName,
-//   };
-// });
-
-//       res.json({ success: true, positions });
-//     } catch (error) {
-//       console.error("Fetch positions error:", error);
-//       if (res.headersSent) {
-//         console.log("Headers already sent in /api/view-positions catch");
-//         return;
-//       }
-//       res.status(500).json({ success: false, message: "Server error" });
-//     }
-//   }
-// );
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=member_${member?.party_member_number}.csv`
+    );
+    await res.send(csv);
+    res.end();
+  } catch (error) {
+    console.error("Export single member error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
 
 // Add this after all routes
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
@@ -1303,7 +1423,6 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 });
 
 app.set("case sensitive routing", false);
-
 /** Start server */
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
