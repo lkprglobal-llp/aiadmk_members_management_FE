@@ -11,10 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { LoginForm } from "./LoginForm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { set } from "date-fns";
-import { Admins } from "@/services/api";
 interface RegisterFormProps {
   onRegister: (name: string, mobile: string, role: string) => Promise<void>;
   onSwitchToLogin: () => void;
@@ -95,7 +92,7 @@ export function RegisterForm({ onRegister, onSwitchToLogin }: RegisterFormProps)
           <CardHeader className="text-center space-y-4">
             <div className="w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-full mx-auto flex items-center justify-center animate-glow">
               <span className="text-3xl font-bold text-primary-foreground">
-                <img src="../../public/aiadmk_logo.png" alt="AIADMK Logo" />
+                <img src="../../public/images/aiadmk_logo.png" alt="AIADMK Logo" />
               </span>
             </div>
             <CardTitle className="text-2xl font-bold text-foreground">

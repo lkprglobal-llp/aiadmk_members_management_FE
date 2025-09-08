@@ -3,6 +3,7 @@
 
 import { set } from "date-fns";
 import { appendOffsetOfLegend } from "recharts/types/util/ChartUtils";
+import { json } from "stream/consumers";
 
 const BASE_URL = "http://localhost:5253/api"; // Update this with your backend URL
 
@@ -10,18 +11,19 @@ export interface Member {
   id?: number;
   mobile: string;
   name: string;
+  date_of_birth: string;
   parents_name: string;
   address: string;
   education_qualification: string;
   caste: string;
+  joining_date: string;
   joining_details: string;
   party_member_number: string;
   voter_id: string;
   aadhar_number: string;
-  image?: string;
+  image?: string | File; // 👈 allow both;
   created_at?: string;
   updated_at?: string;
-  position: string;
   jname: string;
   tname: string;
   dname: string;
@@ -130,35 +132,6 @@ class ApiService {
     }
   }
 
-  // async validateOtp(
-  //   mobile: string,
-  //   otp: string
-  // ): Promise<{
-  //   success: boolean;
-  //   token: string;
-  //   user: Admins;
-  //   message: string;
-  // }> {
-  //   try {
-  //     const response = await fetch(`${BASE_URL}/validate-OTP`, {
-  //       method: "POST",
-  //       headers: { "Content-Type": "application/json" },
-  //       body: JSON.stringify({ mobile, otp }),
-  //     });
-  //     if (!response) throw new Error("OTP validation failed");
-  //     const data = await response.json();
-  //     // console.log(data.user);
-  //     return {
-  //       success: true,
-  //       token: data.token,
-  //       user: data.user,
-  //       message: data.message || "Login successful",
-  //     };
-  //   } catch (error) {
-  //     console.error("OTP validation error:", error);
-  //     throw error;
-  //   }
-  // }
   async validateOtp(
     mobile: string,
     otp: string
@@ -181,7 +154,7 @@ class ApiService {
       }
 
       const data = await response.json();
-      console.log("validateOtp raw response:", data);
+      // console.log("validateOtp raw response:", data);
 
       if (!data.success) {
         throw new Error(data.error || data.message || "Invalid OTP or user");
@@ -224,18 +197,18 @@ class ApiService {
     }
   }
 
-  async logout(): Promise<void> {
-    const response = await fetch(`${BASE_URL}/logout`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("authToken")}`,
-      },
-    });
+  // async logout(): Promise<void> {
+  //   const response = await fetch(`${BASE_URL}/logout`, {
+  //     method: "POST",
+  //     headers: {
+  //       "Content-Type": "application/json",
+  //       Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+  //     },
+  //   });
 
-    if (!response.ok) throw new Error("Logout failed");
-    await response.json();
-  }
+  //   if (!response.ok) throw new Error("Logout failed");
+  //   await response.json();
+  // }
 
   //Members API
 
@@ -257,7 +230,7 @@ class ApiService {
       }
 
       // return Array.isArray(data.members) ? data.members : [];
-
+      // console.log(data.members);
       return data.members;
     } catch (error) {
       console.error("Get members error:", error);
@@ -266,16 +239,16 @@ class ApiService {
     }
   }
 
-  async registerMember(member: Omit<Member, "id">): Promise<Member> {
+  async registerMember(member: FormData): Promise<Member> {
     try {
       const response = await fetch(`${BASE_URL}/Register-Member`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
         },
-        body: JSON.stringify(member),
+        body: member,
       });
+      console.log("api", member);
 
       if (!response.ok) {
         throw new Error(
@@ -289,18 +262,18 @@ class ApiService {
     }
   }
 
-  async updateMember(id: number, member: Partial<Member>): Promise<Member> {
+  async updateMember(id: number | string, payload: FormData): Promise<Member> {
     try {
-      const response = await fetch(`${BASE_URL}/Update-Member/${id}`, {
+      // const isFormData = payload instanceof FormData;
+      const response = await fetch(`${BASE_URL}/update-member/${id}`, {
         method: "PUT",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
         },
-        body: JSON.stringify(member),
+        body: payload,
       });
 
-      if (!response.ok) {
+      if (!response) {
         throw new Error(
           response.status === 401 ? "Unauthorized" : "Failed to update member"
         );
@@ -309,13 +282,15 @@ class ApiService {
     } catch (error) {
       console.error("Update member error:", error);
       // Mock response
-      return { ...member, id } as Member;
+      return { id } as Member;
     }
   }
 
-  async deleteMember(id: number): Promise<void> {
+  async deleteMember(
+    id: number
+  ): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await fetch(`${BASE_URL}/Delete-Member/${id}`, {
+      const response = await fetch(`${BASE_URL}/delete-member/${id}`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -328,6 +303,8 @@ class ApiService {
           response.status === 401 ? "Unauthorized" : "Failed to delete member"
         );
       }
+
+      return await response.json();
     } catch (error) {
       console.error("Delete member error:", error);
     }
@@ -335,9 +312,12 @@ class ApiService {
 
   async exportMember(id: number): Promise<Blob> {
     try {
-      const response = await this.fetchWithAuth(`/api/members/${id}/export`, {
-        headers: { "Content-Type": "application/octet-stream" },
-      });
+      const response = await this.fetchWithAuth(
+        `${BASE_URL}/export/member/${id}`,
+        {
+          headers: { "Content-Type": "application/octet-stream" },
+        }
+      );
       if (!response.ok) {
         throw new Error(
           response.status === 401 ? "Unauthorized" : "Failed to export member"
@@ -352,7 +332,7 @@ class ApiService {
 
   async exportAllMembers(): Promise<Blob> {
     try {
-      const response = await this.fetchWithAuth("/api/members/export", {
+      const response = await this.fetchWithAuth(`${BASE_URL}/export/members`, {
         headers: { "Content-Type": "application/octet-stream" },
       });
       if (!response.ok) {
