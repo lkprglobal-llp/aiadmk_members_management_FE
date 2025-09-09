@@ -14,21 +14,6 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  // interface ApiResponse<T> {
-  //   success: boolean;
-  //   message?: string;
-  //   data?: T[];
-  // }
-
-  // interface Admins {
-  //   id: number;
-  //   username: string;
-  //   created_at: string;
-  //   is_verified: boolean;
-  //   role: string;
-  // }
-
-
   useEffect(() => {
     const checkAuth = async () => {
       setIsLoading(true);

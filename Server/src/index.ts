@@ -198,17 +198,7 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
-// const storage = multer.diskStorage({
-//   destination: (req, file, cb) => {
-//     cb(null, uploadDir);
-//   },
-//   filename: (req, file, cb) => {
-//     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-//     cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
-//   },
-// });
 
-// const upload = multer({ storage });
 /* The `// Retry logic for API requests` section in the code is implementing a retry mechanism for
 making API requests. This mechanism allows the code to retry sending an API request a specified
 number of times if the initial request fails. */
@@ -444,83 +434,7 @@ app.post("/api/Login", async (req: Request, res: Response) => {
  *       500:
  *         description: Server error
  */
-// app.post(
-//   "/api/validate-otp",
-//   async (req: Request, res: Response): Promise<void> => {
-//     const { mobile, otp } = req.body;
-//     const sanitizedMobile = sanitizePhoneNumber(mobile);
-//     // Validate input
-//     if (!mobile) {
-//       res.status(400).json({ error: "Mobile number is required" });
-//       return;
-//     }
-//     if (!otp) {
-//       res.status(400).json({ error: "OTP is required" });
-//       return;
-//     }
 
-//     try {
-//       const dbresult: any = await db?.execute(
-//         "SELECT id, username, created_at, is_verified, role FROM admins WHERE mobile = ?",
-//         [mobile]
-//       );
-//       const [result] = dbresult;
-
-//       if (!result) {
-//         res.status(404).json({ message: "User not found" });
-//         return;
-//       }
-//       const [user] = result;
-
-//       if (user.otp_expiry && new Date(user.otp_expiry) < new Date()) {
-//         res.status(400).json({ error: "OTP has expired" });
-//         return;
-//       }
-
-//       const token = jwt.sign({ id: user?.id }, JWT_SECRET, { expiresIn: "1h" });
-
-//       res.status(200).json({
-//         success: true,
-//         token,
-//         user: {
-//           id: user.id,
-//           username: user.username,
-//           created_at: user.created_at,
-//           is_verified: 1,
-//           role: user.role,
-//         },
-//         message: "Login successful",
-//       });
-//     } catch (error) {
-//       res.status(500).json({ success: false, message: "Server error" });
-//       return;
-//     }
-
-//     // db?.execute("SELECT * FROM admins WHERE mobile = ? AND otp = ?", [
-//     //   sanitizedMobile,
-//     //   otp,
-//     // ]).then(([results]: [any, any]) => {
-//     //   if (!results || results.length === 0) {
-//     //     return { error: "Invalid mobile number or OTP" };
-//     //   }
-
-//     //Clear OTP
-//     db?.execute(
-//       "UPDATE admins SET otp = NULL, otp_expiry = NULL WHERE mobile = ?",
-//       [sanitizedMobile]
-//     ).then(() => {
-//       return { error: "Server error" };
-//     });
-
-//     //Update Status of User / Admin
-//     db?.execute("UPDATE admins SET is_verified = ? WHERE mobile = ?", [
-//       1,
-//       sanitizedMobile,
-//     ]).then(() => {
-//       return { error: "Server error" };
-//     });
-//   }
-// );
 app.post(
   "/api/validate-otp",
   async (req: Request, res: Response): Promise<void> => {
@@ -655,12 +569,6 @@ app.get(
     }
   }
 );
-
-// app.post("/api/logout", (req: Request, res: Response) => {
-//   // Handle logout logic (e.g., invalidate session, token, etc.)
-//   localStorage.removeItem("authToken");
-//   return res.status(200).json({ message: "Logged out successfully" });
-// });
 
 /**
  * @swagger
@@ -925,7 +833,7 @@ app.post(
       party_member_number,
       voter_id,
       aadhar_number,
-      image,
+      image = req.file ? `uploads/members/${req.file.filename}` : null,
       dname,
       tname,
       jname,
@@ -952,7 +860,7 @@ app.post(
 
       // Insert member
       const [result]: any = await db?.execute(
-        `INSERT INTO users (id, mobile, name, date_of_birth, parents_name, address, education_qualification, caste, joining_date, joining_details, party_member_number, voter_id, aadhar_number, image, tname, dname, jname) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO users (id, mobile, name, date_of_birth, parents_name, address, education_qualification, caste, joining_date, joining_details, party_member_number, voter_id, aadhar_number, image, tname, dname, jname) VALUES (?,?,?,?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           mobile || null,
@@ -984,7 +892,7 @@ app.post(
       return res.json({
         success: true,
         member: {
-          image,
+          image: req.file ? `uploads/members/${req.file.filename}` : null,
           name,
           mobile,
           joining_date,
@@ -1256,12 +1164,12 @@ app.delete("/api/delete-member/:id", async (req: Request, res: Response) => {
 
     // Delete image file from disk
     if (member.image) {
-      const imagePath = path.join(__dirname, "../", member.image); // adjust path
+      const imagePath = path.join(__dirname, "../src/", member.image); // adjust path
       fs.unlink(imagePath, (err) => {
         if (err) console.warn("Failed to delete image file:", err);
       });
     }
-
+    console.log(member.image);
     // Delete from DB
     const result = await db?.execute("DELETE FROM users WHERE id = ?", [
       memberId,
@@ -1335,34 +1243,38 @@ app.get(
  *               type: array
  */
 // ✅ Export all members
-app.get("/api/export/members", async (req: Request, res: Response) => {
-  try {
-    const [rows]: any = await db?.execute("SELECT * FROM users");
+app.get(
+  "/api/export/members",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    try {
+      const [rows]: any = await db?.execute("SELECT * FROM users");
 
-    if (!rows.length) {
-      return res
-        .status(404)
-        .json({ success: false, message: "No members found" });
+      if (!rows.length) {
+        return res
+          .status(404)
+          .json({ success: false, message: "No members found" });
+      }
+      const fields = Object.keys(rows[0]);
+      const csv = [
+        fields.join(","), // header row
+        ...rows.map((row: any) =>
+          fields.map((f) => `"${row[f] ?? ""}"`).join(",")
+        ),
+      ].join("\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        "attachment; filename=all_members.csv"
+      );
+      await res.send(csv);
+      res.end();
+    } catch (error) {
+      console.error("Export all members error:", error);
+      res.status(500).json({ success: false, message: "Server error" });
     }
-    const fields = Object.keys(rows[0]);
-    const csv = [
-      fields.join(","), // header row
-      ...rows.map((row: any) =>
-        fields.map((f) => `"${row[f] ?? ""}"`).join(",")
-      ),
-    ].join("\n");
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader(
-      "Content-Disposition",
-      "attachment; filename=all_members.csv"
-    );
-    await res.send(csv);
-    res.end();
-  } catch (error) {
-    console.error("Export all members error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
   }
-});
+);
 
 /**
  * @swagger
@@ -1379,41 +1291,46 @@ app.get("/api/export/members", async (req: Request, res: Response) => {
  *               type: array
  */
 // ✅ Export single member by ID
-app.get("/api/export/member/:id", async (req: Request, res: Response) => {
-  const { id } = req.params;
+app.get(
+  "/api/export/member/:id",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
 
-  try {
-    const [rows]: any = await db?.execute("SELECT * FROM users WHERE id = ?", [
-      id,
-    ]);
+    try {
+      const [rows]: any = await db?.execute(
+        "SELECT * FROM users WHERE id = ?",
+        [id]
+      );
 
-    if (!rows.length) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Member not found" });
+      if (!rows.length) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Member not found" });
+      }
+
+      const member = rows[0];
+      const fields = Object.keys(member);
+      const csv = [
+        fields.join(","), // header row
+        ...rows.map((row: any) =>
+          fields.map((f) => `"${row[f] ?? ""}"`).join(",")
+        ),
+      ].join("\n");
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=member_${member?.party_member_number}.csv`
+      );
+      await res.send(csv);
+      res.end();
+    } catch (error) {
+      console.error("Export single member error:", error);
+      res.status(500).json({ success: false, message: "Server error" });
     }
-
-    const member = rows[0];
-    const fields = Object.keys(member);
-    const csv = [
-      fields.join(","), // header row
-      ...rows.map((row: any) =>
-        fields.map((f) => `"${row[f] ?? ""}"`).join(",")
-      ),
-    ].join("\n");
-
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=member_${member?.party_member_number}.csv`
-    );
-    await res.send(csv);
-    res.end();
-  } catch (error) {
-    console.error("Export single member error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
   }
-});
+);
 
 // Add this after all routes
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
