@@ -1350,7 +1350,7 @@ export function AddMemberForm({ onBack, onMemberAdded }: AddMemberFormProps) {
                 <label className="text-sm font-medium">Date of Birth</label>
                 <Input
                   type="date"
-                  value={formData.date_of_birth.split("T")[0]}
+                  value={formData.date_of_birth}
                   placeholder="June 01, 2025"
                   className="bg-background pr-10"
                   onChange={(e) =>

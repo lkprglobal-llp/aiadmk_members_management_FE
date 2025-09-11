@@ -753,12 +753,8 @@ export function Dashboard({ onAddMember, onViewCalendar }: DashboardProps) {
                       <td className="py-3 px-4"><p className="font-medium">{m.party_member_number.slice(8)}</p></td>
                       <td className="py-3 px-4"><img className="w-20 h-20 rounded-full object-cover bg-transparent" src={`${BASE_URL}${m.image}`} alt="user image" />
                       </td>
-                      <td className="py-3 px-4">
-                        <p className="font-medium">{m.name}</p>
-                      </td>
-                      <td className="py-3 px-4"><p className="font-medium">
-                        {m.parents_name}
-                      </p></td>
+                      <td className="py-3 px-4">{m.name}</td>
+                      <td className="py-3 px-4">{m.parents_name}</td>
                       <td className="py-3 px-4">{m.mobile}</td>
                       <td className="py-3 px-4">
                         <Badge variant="default">{m.dname}</Badge>
@@ -782,7 +778,7 @@ export function Dashboard({ onAddMember, onViewCalendar }: DashboardProps) {
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
-                              <DialogTitle>Members Details</DialogTitle>
+                              <DialogTitle>Member: {m.party_member_number.slice(8)}</DialogTitle>
                               <DialogDescription>
                                 <div className="grid grid-cols-2 gap-4 mt-4">
                                   <div className="col-span-2 flex justify-center">
@@ -805,7 +801,7 @@ export function Dashboard({ onAddMember, onViewCalendar }: DashboardProps) {
 
                                   <div>
                                     <p className="font-semibold">Date of Birth:</p>
-                                    <p>{m.date_of_birth.split("T")[0]}</p>
+                                    <p>{m.date_of_birth}</p>
                                   </div>
 
                                   <div>

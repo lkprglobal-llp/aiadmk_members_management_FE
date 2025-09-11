@@ -57,20 +57,19 @@ interface Position {
   jname: string;
 }
 
-// export interface union {
-//   dcode: string;
-//   dname: string;
-// }
-// export interface team {
-//   tcode: string;
-//   tname: string;
-//   union: union[];
-// }
-// export interface position {
-//   jcode: string;
-//   jname: string;
-//   team: team[];
-// }
+export interface Event {
+  id?: number;
+  title: string;
+  description: string;
+  date: string;
+  time: string;
+  type: string;
+  images?: string[] | File[]; // 👈 allow both
+  location: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 class ApiService {
   private async fetchWithAuth(
     url: string,
@@ -360,6 +359,94 @@ class ApiService {
       return data.positions;
     } catch (error) {
       console.error("Get positions error:", error);
+      throw error;
+    }
+  }
+
+  async getEvents() {
+    try {
+      const response = await this.fetchWithAuth(`${BASE_URL}/view-events`);
+
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to fetch events"
+        );
+      }
+      const data = await response.json();
+      // console.log(data.events);
+      return data.events;
+    } catch (error) {
+      console.error("Get events error:", error);
+      throw error;
+    }
+  }
+
+  async addEvent(formdata: FormData): Promise<Event> {
+    try {
+      const response = await this.fetchWithAuth(`${BASE_URL}/add-event`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+        method: "POST",
+        body: formdata,
+      });
+      console.log("api", formdata);
+
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to add event"
+        );
+      }
+      return await response.json();
+    } catch (error) {
+      console.error("Add event error:", error);
+      throw error;
+    }
+  }
+
+  async updateEvent(id: number | string, event: FormData): Promise<Event> {
+    try {
+      const response = await this.fetchWithAuth(
+        `${BASE_URL}/update-event/${id}`,
+        {
+          method: "PUT",
+          body: event,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to update event"
+        );
+      }
+      return await response.json();
+    } catch (error) {
+      console.error("Update event error:", error);
+      throw error;
+    }
+  }
+
+  async deleteEvent(
+    id: number
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await this.fetchWithAuth(
+        `${BASE_URL}/delete-event/${id}`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to delete event"
+        );
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Delete event error:", error);
       throw error;
     }
   }
