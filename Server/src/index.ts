@@ -9,6 +9,7 @@ import swaggerJsdoc from "swagger-jsdoc";
 import fs from "fs";
 import multer, { FileFilterCallback } from "multer";
 import ExcelJS from "exceljs";
+import { image } from "pdfkit";
 
 //** Swagger definition for API Calls*/
 const options = {
@@ -38,6 +39,20 @@ const options = {
         url: "http://localhost:5253",
       },
     ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT", // or "Token"
+        },
+      },
+    },
+    security: [
+      {
+        bearerAuth: [],
+      },
+    ],
   },
   apis: ["./src/index.ts"], // Path to files with JSDoc annotations
 };
@@ -56,10 +71,10 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "50mb" }));
+app.use(express.json({ limit: "100mb" })); // Increase JSON payload limit
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-app.use(body_parser.json());
+app.use(body_parser.json({ limit: "100mb" })); // Increase body-parser limit
 
 //** OTP Store and Token generations */
 // JWT secret (store in environment variables in production)
@@ -123,17 +138,9 @@ const dbConfig = {
   database: "aiadmk_db",
 };
 
-// db.connect((err) => {
-//   if (err) {
-//     console.error("MySQL connection error:", err);
-//     throw err;
-//   }
-//   console.log("Connected to MySQL");
-// });
-
 let db: Connection | null = null;
 
-//! Initialize database connection
+//! Initialized database connection
 async function initializeDbConnection() {
   try {
     db = await mysql.createConnection(dbConfig);
@@ -188,8 +195,8 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Configure multer storage
-const storage = multer.diskStorage({
+// Configure multer storage for members picture uploads
+const member_storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -197,7 +204,20 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+const memberUpload = multer({ storage: member_storage });
+
+//configure multer storage for events image uploads
+// Multer setup
+const event_storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "Eventuploads/events"); // save in uploads/events
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + "-" + file.originalname);
+  },
+});
+
+const eventUpload = multer({ storage: event_storage });
 
 /* The `// Retry logic for API requests` section in the code is implementing a retry mechanism for
 making API requests. This mechanism allows the code to retry sending an API request a specified
@@ -280,11 +300,11 @@ app.post("/api/register", async (req: Request, res: Response) => {
 
   // Check for duplicate mobile
   try {
-    const existingUser: any = await db?.execute<RowDataPacket[]>(
+    const existingUser = await db?.execute(
       "SELECT * FROM admins WHERE mobile = ?",
       [sanitizedMobile]
     );
-    if (existingUser.length > 0) {
+    if (!existingUser) {
       return res.status(400).json({ error: "Mobile number already exists" });
     }
 
@@ -818,7 +838,7 @@ app.get(
 // });
 app.post(
   "/api/Register-Member/",
-  upload.single("image"),
+  memberUpload.single("image"),
   async (req: Request, res: Response) => {
     const {
       mobile,
@@ -986,7 +1006,7 @@ app.post(
  */
 app.put(
   "/api/update-member/:id",
-  upload.single("image"),
+  memberUpload.single("image"),
   async (req: Request, res: Response) => {
     const {
       mobile,
@@ -1328,6 +1348,379 @@ app.get(
     } catch (error) {
       console.error("Export single member error:", error);
       res.status(500).json({ success: false, message: "Server error" });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * paths:
+ *   /view-events:
+ *     get:
+ *       summary: Get all events
+ *       tags: [Events]
+ *       responses:
+ *         "200":
+ *           description: List of events
+ *           content:
+ *             application/json:
+ *               schema:
+ *                 type: array
+ */
+app.get(
+  "/api/view-events",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    try {
+      const [rows]: any = await db?.query(`SELECT * FROM events`);
+
+      res.json({ success: true, events: rows });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to fetch events" });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /add-event:
+ *   post:
+ *     summary: Create a new event
+ *     tags: [Events]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 example: Independence Day Celebration
+ *               type:
+ *                 type: string
+ *                 enum: [party, government]
+ *                 example: party
+ *               date:
+ *                 type: string
+ *                 format: date
+ *                 example: 2025-09-10
+ *               time:
+ *                 type: string
+ *                 format: time
+ *                 example: 10:30
+ *               location:
+ *                 type: string
+ *                 example: Chennai, Tamil Nadu
+ *               description:
+ *                 type: string
+ *                 example: A large gathering to celebrate...
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       "201":
+ *         description: Event created successfully
+ */
+// app.post(
+//   "/api/add-event",
+//   authenticateToken,
+//   eventUpload.array("images", 3),
+//   async (req: Request, res: Response) => {
+//     try {
+//       // images are in req.files
+//       const { title, type, date, time, location, description } = req.body;
+//       const imagePaths = req.files
+//         ? (req.files as Express.Multer.File[]).map((file) => file.path)
+//         : [];
+//       const [result]: any = await db?.execute(
+//         `INSERT INTO events (title, type, date, time, location, description, images)
+//        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+//         [
+//           title,
+//           type,
+//           date,
+//           time,
+//           location,
+//           description,
+//           imagePaths.length ? JSON.stringify(imagePaths) : null,
+//         ]
+//       );
+
+//       res.json({
+//         success: true,
+//         id: result.insertId,
+//         message: "Event added successfully",
+//       });
+//     } catch (err) {
+//       console.error(err);
+//       res.status(500).json({ success: false, message: "Failed to add event" });
+//     }
+//   }
+// );
+app.post("/api/add-event", eventUpload.array("images", 3), async (req, res) => {
+  try {
+    const { title, type, date, time, location, description } = req.body;
+
+    const imagePaths = req.files
+      ? (req.files as Express.Multer.File[]).map(
+          (f) => `/uploads/events/${f.filename}`
+        )
+      : [];
+
+    // Validate required fields
+    if (!title || !date) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Title and date are required" });
+    }
+
+    // Get uploaded image paths
+
+    // Save to DB (example)
+    const [result]: any = await db?.execute(
+      `INSERT INTO events (title, type, date, time, location, description, images)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [title, type, date, time, location, description, imagePaths]
+    );
+    console.log(result);
+
+    res.json({
+      success: true,
+      event: {
+        title,
+        type,
+        date,
+        time,
+        location,
+        description,
+        images: imagePaths.length ? imagePaths : null,
+      },
+    });
+  } catch (err) {
+    console.error("Event add error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+/**
+ * @swagger
+ * /events/{id}:
+ *   get:
+ *     summary: Get event by ID
+ *     tags: [Events]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       "200":
+ *         description: Event details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/Event"
+ *       "404":
+ *         description: Event not found
+ */
+app.get(
+  "/api/event/:id",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      const [rows]: any = await db?.execute(
+        "SELECT * FROM events WHERE id = ?",
+        [id]
+      );
+      if (rows.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Event not found" });
+      }
+      res.json({ success: true, event: rows[0] });
+    } catch (err) {
+      console.error(err);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to fetch event" });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/update-event/{id}:
+ *   post:
+ *     tags: [Events]
+ *     summary: Update an existing event
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           properties:
+ *             id:
+ *               type: Integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               mobile:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *               parents_name:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *               education_qualification:
+ *                 type: string
+ *               caste:
+ *                 type: string
+ *               joining_details:
+ *                 type: string
+ *               party_member_number:
+ *                 type: string
+ *               voter_id:
+ *                 type: string
+ *               aadhar_number:
+ *                 type: string
+ *               image:
+ *                 type: string
+ *               dname:
+ *                 type: string
+ *               tname:
+ *                 type: string
+ *               jname:
+ *                 type: string
+ *             required:
+ *               - mobile
+ *               - name
+ *               - parents_name
+ *               - address
+ *               - education_qualification
+ *               - caste
+ *               - joining_details
+ *               - party_member_number
+ *               - voter_id
+ *               - aadhar_number
+ *               - image
+ *               - dname
+ *               - tname
+ *               - jname
+ *     responses:
+ *       200:
+ *         description: Members registered successfully
+ *       400:
+ *         description: Invalid input or duplicate Member
+ *       500:
+ *         description: Server error
+ */
+app.put(
+  "/api/update-event/:id",
+  authenticateToken,
+  eventUpload.array("images", 3),
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { title, type, date, time, location, description } = req.body;
+
+    try {
+      const [rows]: any = await db?.execute(
+        "SELECT * FROM events WHERE id = ?",
+        [id]
+      );
+      if (rows.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Event not found" });
+      }
+
+      const oldImage = rows[0].image;
+      const newImage = req.file
+        ? `uploads/events/${req.file.filename}`
+        : oldImage;
+
+      // Fix: Declare imagePaths for update
+      const imagePaths = req.files
+        ? (req.files as Express.Multer.File[]).map((file) => file.path)
+        : oldImage
+        ? [oldImage]
+        : [];
+
+      await db?.execute(
+        `UPDATE events SET title=?, type=?, date=?, time=?, location=?, description=?, images=? WHERE id=?`,
+        [
+          title,
+          type,
+          date,
+          time,
+          location,
+          description,
+          JSON.stringify(imagePaths),
+          id,
+        ]
+      );
+
+      res.json({ success: true, message: "Event updated successfully" });
+    } catch (err) {
+      console.error(err);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to update event" });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /delete-event/{id}:
+ *   delete:
+ *     summary: Delete an event
+ *     tags: [Events]
+ */
+app.delete(
+  "/api/delete-event/:id",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    try {
+      const [rows]: any = await db?.execute(
+        "SELECT * FROM events WHERE id = ?",
+        [id]
+      );
+      if (rows.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Event not found" });
+      }
+
+      const event = rows[0];
+      if (event.image) {
+        const fs = require("fs");
+        const imgPath = path.join(__dirname, "..", event.image);
+        fs.unlink(imgPath, (err: any) => {
+          if (err) console.warn("Failed to delete event image:", err);
+        });
+      }
+
+      await db?.execute("DELETE FROM events WHERE id = ?", [id]);
+
+      res.json({ success: true, message: "Event deleted successfully" });
+    } catch (err) {
+      console.error(err);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to delete event" });
     }
   }
 );
