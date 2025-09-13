@@ -1,0 +1,33 @@
+name: Build and Deploy to Hostinger
+
+on:
+  push:
+    branches:
+      - main # Triggers on pushes to 'main' branch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18" # Match your local Node version
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build frontend
+        run: npm run build # Generates 'dist' folder
+
+      - name: Push build to 'build' branch
+        uses: s0/git-publish-subdir-action@develop
+        env:
+          REPO: self
+          BRANCH: build # Branch Hostinger pulls from
+          FOLDER: dist # Folder to push (built by 'npm run build')
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Auto-provided
+          MESSAGE: "Auto-build: {sha} {msg}"
