@@ -42,7 +42,11 @@ import {
   Carousel,
   CarouselContent,
   CarouselItem,
-} from "@/components/ui/carousel"
+} from "@/components/ui/carousel";
+import MemberCard from "../hooks/member-card";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+
 import { useToast } from "@/hooks/use-toast";
 
 const BASE_URL = "http://localhost:5253/"; // Update this with your backend URL
@@ -61,8 +65,11 @@ interface Position {
   jname: string;
 }
 
+
 export function Dashboard({ onAddMember, onViewCalendar }: DashboardProps) {
   const [members, setMembers] = useState<Member[]>([]);
+  // const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
   const [positions, setPositions] = useState<Position[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({
@@ -190,18 +197,7 @@ export function Dashboard({ onAddMember, onViewCalendar }: DashboardProps) {
       formData.append("address", editingMember.address || "");
       formData.append("education_qualification", editingMember.education_qualification || "");
       formData.append("caste", editingMember.caste || "");
-
-      // ✅ handle joining_date safely
-      // if (editingMember.joining_date) {
-      //   const dateValue =
-      //     editingMember.joining_date instanceof string
-      //       ? editingMember.joining_date.toISOString().split("T")[0]
-      //       : new Date(editingMember.joining_date).toISOString().split("T")[0];
-
-      //   formData.append("joining_date", dateValue);
-      // } else {
-      //   formData.append("joining_date", "");
-      // }
+      formData.append("date_of_birth", editingMember.date_of_birth || "");
       formData.append("joining_date", editingMember.joining_date || "");
       formData.append("joining_details", editingMember.joining_details || "");
       formData.append("party_member_number", editingMember.party_member_number || "");
@@ -239,14 +235,6 @@ export function Dashboard({ onAddMember, onViewCalendar }: DashboardProps) {
     }
   };
 
-
-  const handleViewMember = (member: Member) => {
-    // toast({
-    //   title: "Member Details",
-    //   description: `Name: ${member.name}, Mobile: ${member.mobile}, Position: ${member.jname}, Member No: ${member.party_member_number}`,
-    // });
-
-  };
 
   const handleExportMember = async (member: Member) => {
     try {
@@ -323,6 +311,67 @@ export function Dashboard({ onAddMember, onViewCalendar }: DashboardProps) {
       bgColor: "bg-secondary/10",
     },
   ];
+
+
+  const downloadPDF = async (member: Member) => {
+    const card = document.getElementById("printable-card");
+    if (!card) return;
+
+    try {
+      // Convert DOM to canvas
+      const canvas = await html2canvas(card, {
+        useCORS: true,
+        scale: 2,
+        backgroundColor: "#ffffff",
+        scrollX: 0,
+        scrollY: -window.scrollY, // important: capture full node, not only viewport
+        windowWidth: card.scrollWidth,
+        windowHeight: card.scrollHeight,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a5");
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+
+      const imgWidth = pdfWidth - 20; // 20mm margin
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      let position = 40; // leave space for logo
+      let heightLeft = imgHeight;
+
+      // ✅ Add Logo on top
+      const logo = new Image();
+      logo.src = "../../public/images/aiadmk_logo.png";
+      await new Promise((resolve) => {
+        logo.onload = () => {
+          const logoWidth = 10;
+          const logoHeight = 10;
+          const x = (pdfWidth - logoWidth) / 2;
+          pdf.addImage(logo, "PNG", x, 10, logoWidth, logoHeight);
+          resolve(true);
+        };
+      });
+
+      // ✅ Add member card
+      pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+
+      // If card overflows page
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight; // keep space for header
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 10, position, imgWidth, imgHeight);
+        heightLeft -= pdfHeight;
+      }
+
+      // ✅ Save with single member’s name
+      pdf.save(`${member.name}-membership-card.pdf`);
+    } catch (err) {
+      console.error("PDF generation failed", err);
+    }
+  };
 
 
   const carouselImages = [
@@ -766,12 +815,11 @@ export function Dashboard({ onAddMember, onViewCalendar }: DashboardProps) {
                         <Badge variant="default">{m.jname}</Badge>
                       </td>
                       <td className="py-3 px-4 flex space-x-2">
-                        <Dialog>
+                        <Dialog open={isOpen} onOpenChange={setIsOpen}>
                           <DialogTrigger asChild>
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleViewMember(m)}
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
@@ -780,7 +828,7 @@ export function Dashboard({ onAddMember, onViewCalendar }: DashboardProps) {
                             <DialogHeader>
                               <DialogTitle>Member: {m.party_member_number.slice(8)}</DialogTitle>
                               <DialogDescription>
-                                <div className="grid grid-cols-2 gap-4 mt-4">
+                                <div id="printable-card" className="grid grid-cols-2 gap-4 mt-4">
                                   <div className="col-span-2 flex justify-center">
                                     <img
                                       src={`${BASE_URL}${m.image}`}
@@ -864,7 +912,14 @@ export function Dashboard({ onAddMember, onViewCalendar }: DashboardProps) {
                                     <p>{m.address}</p>
                                   </div>
                                 </div>
-
+                                <div className="flex justify-end gap-2 mt-4">
+                                  <Button onClick={() => downloadPDF(m)} className="bg-green-600 text-white">
+                                    Download PDF
+                                  </Button>
+                                  <Button variant="outline" onClick={() => setIsOpen(false)}>
+                                    Close
+                                  </Button>
+                                </div>
                               </DialogDescription>
                             </DialogHeader>
                           </DialogContent>
