@@ -753,6 +753,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { apiService, Event } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import { set } from "date-fns";
+import { on } from "events";
 
 const BASE_URL = "http://localhost:5253/";
 
@@ -929,14 +930,6 @@ export function EventCalendar({ onBack }: EventCalendarProps) {
     if (selectedDate) {
       temp = temp.filter((ev) => {
         const normalized = getEventLocalDate(ev);
-        // console.log(
-        //   "Filtering by date:",
-        //   selectedDate,
-        //   "Event raw:",
-        //   ev.date,
-        //   "Normalized local:",
-        //   normalized
-        // );
         return normalized === selectedDate;
       });
     }
@@ -1014,49 +1007,7 @@ export function EventCalendar({ onBack }: EventCalendarProps) {
     });
   };
 
-  // Add event (keep your existing behavior)
-  // const handleAddEvent = async () => {
-  //   if (!newEvent.title || !newEvent.date || !newEvent.time) {
-  //     toast({
-  //       title: "Validation Error",
-  //       description: "Please fill in title, date, and time",
-  //       variant: "destructive",
-  //     });
-  //     return;
-  //   }
-
-  //   try {
-  //     // If apiService.addEvent expects FormData to accept files, change accordingly.
-  //     // Here we try to detect and send file via FormData if newEvent.image is a File
-  //     const formData = new FormData();
-
-  //     // Append all text fields
-  //     formData.append("title", newEvent.title || "");
-  //     formData.append("type", newEvent.type || "");
-  //     formData.append("date", newEvent.date || "");
-  //     formData.append("time", newEvent.time || "");
-  //     formData.append("location", newEvent.location || "");
-  //     formData.append("description", newEvent.description || "");
-
-  //     // Append multiple images
-  //     if (newEvent.images && newEvent.images.length > 0) {
-  //       (newEvent.images as File[]).forEach((image) => {
-  //         formData.append("images", image); // multer field name
-  //       });
-  //     }
-
-  //     const addedEvent = await apiService.addEvent(formData)
-
-  //     // update local state (API should return created event)
-  //     setEvents((prev) => [...prev, addedEvent]);
-  //     setNewEvent({ title: "", description: "", date: "", time: "", type: "party", location: "", images: [] });
-  //     setIsAddingEvent(false);
-  //     toast({ title: "Success", description: "Event added successfully!" });
-  //   } catch (err) {
-  //     console.error(err);
-  //     toast({ title: "Error", description: "Failed to add event", variant: "destructive" });
-  //   }
-  // };
+  // Add event from modal
   const handleAddEvent = async () => {
     if (!newEvent.title || !newEvent.date || !newEvent.time) {
       toast({
@@ -1070,33 +1021,32 @@ export function EventCalendar({ onBack }: EventCalendarProps) {
     try {
       const formData = new FormData();
 
-      // Append all text fields
-      formData.append("title", newEvent.title);
-      formData.append("type", newEvent.type);
-      formData.append("date", newEvent.date);
-      formData.append("time", newEvent.time);
-      formData.append("location", newEvent.location || "");
-      formData.append("description", newEvent.description || "");
-
-      // Append multiple images
-      if (newEvent.images && Array.isArray(newEvent.images) && newEvent.images.length > 0) {
-        newEvent.images.forEach((image, index) => {
-          if (image instanceof File) {
-            formData.append("images", image); // multer field name
+      Object.entries(newEvent).forEach(([key, value]) => {
+        if (value) {
+          if (value instanceof File) {
+            formData.append(key, value);
           } else {
-            console.warn(`Image at index ${index} is not a File object, skipping`);
+            formData.append(key, value as string);
           }
+        }
+      });
+
+      if (newEvent.images && Array.isArray(newEvent.images) && newEvent.images.length > 0) {
+        newEvent.images.forEach((image) => {
+          formData.append("images", image); // multer field name
         });
       }
 
       const response = await apiService.addEvent(formData);
+      console.log("Add event response:", response);
 
       // Update local state with the created event from the response
       if (response && response.id) {
         setEvents((prev) => [...prev, response]);
-        setNewEvent({ title: "", description: "", date: "", time: "", type: "party", location: "", images: [] });
+        setNewEvent({ title: "", description: "", date: "", time: "", type: "", location: "", images: [] });
         setIsAddingEvent(false);
         toast({ title: "Success", description: "Event added successfully!" });
+        onBack(); // Navigate back to main view
       } else {
         throw new Error(response.title || "Failed to add event");
       }
@@ -1389,8 +1339,8 @@ export function EventCalendar({ onBack }: EventCalendarProps) {
             <DialogContent className="max-w-2xl">
               {selectedEvent && (
                 <>
-                  <DialogHeader>
-                    <DialogTitle className="flex items-center justify-between">
+                  <DialogHeader className="mb-2 pb-1 border-b border-muted-foreground/20">
+                    <DialogTitle className="flex items-center justify-between container">
                       <span>{selectedEvent.title}</span>
                       <div className="flex items-center space-x-2">
                         <Button size="sm" variant="destructive" onClick={handleDeleteSelectedEvent}>

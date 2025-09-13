@@ -373,7 +373,6 @@ class ApiService {
         );
       }
       const data = await response.json();
-      // console.log(data.events);
       return data.events;
     } catch (error) {
       console.error("Get events error:", error);
@@ -383,14 +382,15 @@ class ApiService {
 
   async addEvent(formdata: FormData): Promise<Event> {
     try {
-      const response = await this.fetchWithAuth(`${BASE_URL}/add-event`, {
+      const response = await fetch(`${BASE_URL}/add-event`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
         },
         method: "POST",
         body: formdata,
       });
-      console.log("api", formdata);
+      console.log("api event", formdata);
+      console.log("api event response", response);
 
       if (!response.ok) {
         throw new Error(

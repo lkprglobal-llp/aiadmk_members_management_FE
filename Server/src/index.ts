@@ -1,4 +1,4 @@
-import express, { json, NextFunction, Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import mysql, { Connection, RowDataPacket } from "mysql2/promise";
 import axios from "axios";
 import cors from "cors";
@@ -71,10 +71,10 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "100mb" })); // Increase JSON payload limit
+// app.use(express.json({ limit: "100mb" })); // Increase JSON payload limit
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-app.use(body_parser.json({ limit: "100mb" })); // Increase body-parser limit
+// app.use(body_parser.json({ limit: "100mb" })); // Increase body-parser limit
 
 //** OTP Store and Token generations */
 // JWT secret (store in environment variables in production)
@@ -208,12 +208,18 @@ const memberUpload = multer({ storage: member_storage });
 
 //configure multer storage for events image uploads
 // Multer setup
+
+const eventUploadDir = path.join(__dirname, "uploads/events");
+if (!fs.existsSync(eventUploadDir)) {
+  fs.mkdirSync(eventUploadDir, { recursive: true });
+}
 const event_storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "Eventuploads/events"); // save in uploads/events
+    cb(null, eventUploadDir); // save in uploads/events
   },
   filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
+    const uniquename = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, `${uniquename}${path.extname(file.originalname)}`);
   },
 });
 
@@ -284,50 +290,55 @@ specified, which handles the registration process for a new user / admin. */
  *         description: Server error
  */
 
-app.post("/api/register", async (req: Request, res: Response) => {
-  const { username, mobile, role } = req.body;
-  const sanitizedMobile = sanitizePhoneNumber(mobile);
-  // Validate input
-  if (!mobile) {
-    return res.status(400).json({ error: "Mobile number is required" });
-  }
-  if (!mobile_validate(sanitizedMobile)) {
-    return res.status(400).json({ error: "Invalid mobile number format" });
-  }
-  if (!role) {
-    return res.status(400).json({ error: "Role is required" });
-  }
-
-  // Check for duplicate mobile
-  try {
-    const existingUser = await db?.execute(
-      "SELECT * FROM admins WHERE mobile = ?",
-      [sanitizedMobile]
-    );
-    if (!existingUser) {
-      return res.status(400).json({ error: "Mobile number already exists" });
+app.post(
+  "/api/register",
+  express.json({ limit: "100mb" }),
+  body_parser.json({ limit: "100mb" }),
+  async (req, res) => {
+    const { username, mobile, role } = req.body;
+    const sanitizedMobile = sanitizePhoneNumber(mobile);
+    // Validate input
+    if (!mobile) {
+      return res.status(400).json({ error: "Mobile number is required" });
+    }
+    if (!mobile_validate(sanitizedMobile)) {
+      return res.status(400).json({ error: "Invalid mobile number format" });
+    }
+    if (!role) {
+      return res.status(400).json({ error: "Role is required" });
     }
 
-    const result: any = await db?.execute(
-      "INSERT INTO admins (username, mobile, role) VALUES (?, ?, ?)",
-      [username, sanitizedMobile, role]
-    );
-    const insertId = (result as any).insertId;
-    return res.status(201).json({
-      message: "Admin registered successfully",
-      id: insertId,
-      user: {
+    // Check for duplicate mobile
+    try {
+      const existingUser = await db?.execute(
+        "SELECT * FROM admins WHERE mobile = ?",
+        [sanitizedMobile]
+      );
+      if (!existingUser) {
+        return res.status(400).json({ error: "Mobile number already exists" });
+      }
+
+      const result: any = await db?.execute(
+        "INSERT INTO admins (username, mobile, role) VALUES (?, ?, ?)",
+        [username, sanitizedMobile, role]
+      );
+      const insertId = (result as any).insertId;
+      return res.status(201).json({
+        message: "Admin registered successfully",
         id: insertId,
-        username,
-        mobile: sanitizedMobile,
-        role,
-      },
-    });
-  } catch (error) {
-    console.error("Database error:", error);
-    return res.status(500).json({ error: "Server error" });
+        user: {
+          id: insertId,
+          username,
+          mobile: sanitizedMobile,
+          role,
+        },
+      });
+    } catch (error) {
+      console.error("Database error:", error);
+      return res.status(500).json({ error: "Server error" });
+    }
   }
-});
+);
 
 /**
  * @swagger
@@ -358,73 +369,78 @@ app.post("/api/register", async (req: Request, res: Response) => {
  * The function handles user login by generating an OTP, validating the mobile number, and sending the
  * OTP via WhatsApp.
  */
-app.post("/api/Login", async (req: Request, res: Response) => {
-  const { mobile } = req.body;
-  const sanitizedMobile = sanitizePhoneNumber(mobile);
-  // Validate input
-  if (!mobile) {
-    return res.status(400).json({ error: "Mobile number is required" });
-  }
-  if (!mobile_validate(sanitizedMobile)) {
-    return res.status(400).json({ error: "Invalid mobile number format" });
-  }
-
-  const otp = generateOTP();
-  const expiry = new Date(Date.now() + 5 * 60 * 1000); // OTP valid for 5 minutes
-  const whatsappNumber = formatWhatsAppNumber(mobile);
-
-  try {
-    const isLogin: any = await db?.execute(
-      "SELECT * FROM admins WHERE mobile = ?",
-      [sanitizedMobile]
-    );
-    if (isLogin.length === 0) {
-      return res.status(404).json({ error: "Mobile number not found" });
+app.post(
+  "/api/Login",
+  express.json({ limit: "100mb" }),
+  body_parser.json({ limit: "100mb" }),
+  async (req, res) => {
+    const { mobile } = req.body;
+    const sanitizedMobile = sanitizePhoneNumber(mobile);
+    // Validate input
+    if (!mobile) {
+      return res.status(400).json({ error: "Mobile number is required" });
     }
-  } catch {
-    return res.status(500).json({ error: "Server error" });
-  }
+    if (!mobile_validate(sanitizedMobile)) {
+      return res.status(400).json({ error: "Invalid mobile number format" });
+    }
 
-  // Function to send OTP via WhatsApp
-  async function sendWhatsAppOTP() {
+    const otp = generateOTP();
+    const expiry = new Date(Date.now() + 5 * 60 * 1000); // OTP valid for 5 minutes
+    const whatsappNumber = formatWhatsAppNumber(mobile);
+
     try {
-      const response = await axios.post(whatsappUrl, {
-        to: whatsappNumber,
-        type: "template",
-        template: {
-          language: { policy: "deterministic", code: "en" },
-          name: "otp_copy",
-          components: [
-            { type: "body", parameters: [{ type: "text", text: otp }] },
-            {
-              type: "button",
-              sub_type: "url",
-              index: "0",
-              parameters: [{ type: "text", text: otp }],
-            },
-          ],
-        },
-      });
-
-      console.log("WhatsApp API response:", response.data);
-    } catch (error) {
-      console.error("WhatsApp API error:", error);
+      const isLogin: any = await db?.execute(
+        "SELECT * FROM admins WHERE mobile = ?",
+        [sanitizedMobile]
+      );
+      if (isLogin.length === 0) {
+        return res.status(404).json({ error: "Mobile number not found" });
+      }
+    } catch {
+      return res.status(500).json({ error: "Server error" });
     }
+
+    // Function to send OTP via WhatsApp
+    async function sendWhatsAppOTP() {
+      try {
+        const response = await axios.post(whatsappUrl, {
+          to: whatsappNumber,
+          type: "template",
+          template: {
+            language: { policy: "deterministic", code: "en" },
+            name: "otp_copy",
+            components: [
+              { type: "body", parameters: [{ type: "text", text: otp }] },
+              {
+                type: "button",
+                sub_type: "url",
+                index: "0",
+                parameters: [{ type: "text", text: otp }],
+              },
+            ],
+          },
+        });
+
+        console.log("WhatsApp API response:", response.data);
+      } catch (error) {
+        console.error("WhatsApp API error:", error);
+      }
+    }
+
+    db?.execute("UPDATE admins SET otp = ?, otp_expiry = ? WHERE mobile = ?", [
+      otp,
+      expiry,
+      sanitizedMobile,
+    ]).then(([result]: [any, any]) => {
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: "Mobile number not found" });
+      }
+      // Send OTP via WhatsApp
+      sendWhatsAppOTP();
+      return res.status(200).json({ message: "OTP sent successfully" });
+    });
   }
-
-  db?.execute("UPDATE admins SET otp = ?, otp_expiry = ? WHERE mobile = ?", [
-    otp,
-    expiry,
-    sanitizedMobile,
-  ]).then(([result]: [any, any]) => {
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Mobile number not found" });
-    }
-    // Send OTP via WhatsApp
-    sendWhatsAppOTP();
-    return res.status(200).json({ message: "OTP sent successfully" });
-  });
-});
+);
 
 /**
  * @swagger
@@ -457,6 +473,8 @@ app.post("/api/Login", async (req: Request, res: Response) => {
 
 app.post(
   "/api/validate-otp",
+  express.json({ limit: "100mb" }),
+  body_parser.json({ limit: "100mb" }),
   async (req: Request, res: Response): Promise<void> => {
     if (res.headersSent) {
       console.log("Headers already sent in /api/validate-otp");
@@ -713,132 +731,11 @@ app.get(
  *         description: Server error
  */
 
-// app.post("/api/Register-Member", async (req: Request, res: Response) => {
-//   const {
-//     mobile,
-//     name,
-//     date_of_birth,
-//     parents_name,
-//     address,
-//     education_qualification,
-//     caste,
-//     joining_date,
-//     joining_details,
-//     party_member_number,
-//     voter_id,
-//     aadhar_number,
-//     image,
-//     dname,
-//     tname,
-//     jname,
-//   } = req.body;
-
-//   console.log(mobile);
-//   const imageData = image
-//     ? image.replace(/^data:image\/\w+;base64,/, "")
-//     : null; // Remove data URL prefix if present
-//   //** Validate input */
-//   if (!mobile) {
-//     return res.status(400).json({ error: "Mobile number is required" });
-//   }
-//   if (!name) {
-//     return res.status(400).json({ error: "Name is required" });
-//   }
-
-//   if (!parents_name) {
-//     return res.status(400).json({ error: "Parents name is required" });
-//   }
-//   if (!date_of_birth) {
-//     return res.status(400).json({ error: "Date of Birth is required" });
-//   }
-//   if (!address) {
-//     return res.status(400).json({ error: "Address is required" });
-//   }
-//   if (!education_qualification) {
-//     return res
-//       .status(400)
-//       .json({ error: "Education qualification is required" });
-//   }
-//   if (!caste) {
-//     return res.status(400).json({ error: "Caste is required" });
-//   }
-//   if (!joining_date) {
-//     return res.status(400).json({ error: "Joining date are required" });
-//   }
-//   if (!joining_details) {
-//     return res.status(400).json({ error: "Joining details are required" });
-//   }
-//   if (!party_member_number) {
-//     return res.status(400).json({ error: "Party member number is required" });
-//   }
-//   if (!voter_id) {
-//     return res.status(400).json({ error: "Voter ID is required" });
-//   }
-//   if (!aadhar_number) {
-//     return res.status(400).json({ error: "Aadhar number is required" });
-//   }
-//   if (!image) {
-//     return res.status(400).json({ error: "Image is required" });
-//   }
-//   if (!dname) {
-//     return res.status(400).json({ error: "District name is required" });
-//   }
-//   if (!tname) {
-//     return res.status(400).json({ error: "Taluk name is required" });
-//   }
-//   if (!jname) {
-//     return res.status(400).json({ error: "Jurisdiction name is required" });
-//   }
-
-//   //** Query for Insert into DB */
-
-//   try {
-//     const [result]: any = await db?.execute(
-//       `INSERT INTO users (mobile, name, date_of_birth, parents_name, address, education_qualification, caste, joining_date, joining_details, party_member_number, voter_id, aadhar_number, image, tname, dname, jname) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-//       [
-//         mobile,
-//         name,
-//         date_of_birth,
-//         parents_name,
-//         address,
-//         education_qualification,
-//         caste,
-//         joining_date,
-//         joining_details,
-//         party_member_number,
-//         voter_id,
-//         aadhar_number,
-//         imageData,
-//         dname,
-//         tname,
-//         jname,
-//       ]
-//     );
-//     const insertId = result.insertId;
-//     console.log("index.ts", result);
-//     return res.json({
-//       success: true,
-//       member: {
-//         id: insertId,
-//         name,
-//         mobile,
-//         party_member_number,
-//         tname,
-//         dname,
-//         jname,
-//         parents_name,
-//         created_at: new Date().toISOString(),
-//       },
-//       message: "Member added successfully",
-//     });
-//   } catch (error) {
-//     console.error("Error inserting data:", error);
-//     return res.status(500).json({ error: "Internal server error" });
-//   }
-// });
 app.post(
   "/api/Register-Member/",
   memberUpload.single("image"),
+  express.json({ limit: "100mb" }),
+  body_parser.json({ limit: "100mb" }),
   async (req: Request, res: Response) => {
     const {
       mobile,
@@ -1007,6 +904,8 @@ app.post(
 app.put(
   "/api/update-member/:id",
   memberUpload.single("image"),
+  express.json({ limit: "100mb" }),
+  body_parser.json({ limit: "100mb" }),
   async (req: Request, res: Response) => {
     const {
       mobile,
@@ -1460,50 +1359,71 @@ app.get(
 //     }
 //   }
 // );
-app.post("/api/add-event", eventUpload.array("images", 3), async (req, res) => {
-  try {
-    const { title, type, date, time, location, description } = req.body;
+app.post(
+  "/api/add-event",
+  eventUpload.array("images", 3),
+  express.json({ limit: "100mb" }),
+  body_parser.json({ limit: "100mb" }),
+  async (req, res) => {
+    try {
+      const { title, type, date, time, location, description } = req.body || {};
 
-    const imagePaths = req.files
-      ? (req.files as Express.Multer.File[]).map(
-          (f) => `/uploads/events/${f.filename}`
-        )
-      : [];
+      console.log("req.body:", req.body);
+      // Get uploaded image paths
+      const imagePaths = req.files
+        ? (req.files as Express.Multer.File[]).map(
+            (f) => `/uploads/events/${f.filename}`
+          )
+        : [];
 
-    // Validate required fields
-    if (!title || !date) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Title and date are required" });
-    }
+      // console.log("Uploaded image paths:", imagePaths);
+      // Validate required fields
+      if (!title || !date) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Title and date are required" });
+      }
 
-    // Get uploaded image paths
+      const imagePathsString = JSON.stringify(imagePaths);
+      const formattedDate = new Date(date).toISOString().split("T")[0]; // YYYY-MM-DD
+      const formattedTime = time && time.length <= 5 ? `${time}:00` : time; // HH:mm:ss
+      // Get uploaded image paths
 
-    // Save to DB (example)
-    const [result]: any = await db?.execute(
-      `INSERT INTO events (title, type, date, time, location, description, images)
+      // Save to DB (example)
+      const [result]: any = await db?.execute(
+        `INSERT INTO events (title, type, date, time, location, description, images)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [title, type, date, time, location, description, imagePaths]
-    );
-    console.log(result);
+        [
+          title,
+          type,
+          formattedDate,
+          formattedTime,
+          location,
+          description,
+          imagePathsString,
+        ]
+      );
 
-    res.json({
-      success: true,
-      event: {
-        title,
-        type,
-        date,
-        time,
-        location,
-        description,
-        images: imagePaths.length ? imagePaths : null,
-      },
-    });
-  } catch (err) {
-    console.error("Event add error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+      // console.log("Event insert result:", result);
+      return res.json({
+        success: true,
+        result: {
+          title,
+          type,
+          date: formattedDate,
+          time: formattedTime,
+          location,
+          description,
+          images: imagePaths,
+        },
+        message: "Event added successfully",
+      });
+    } catch (err) {
+      console.error("Event add error:", err);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
   }
-});
+);
 
 /**
  * @swagger
