@@ -63,6 +63,13 @@ const body_parser = require("body-parser");
 const specs = swaggerJsdoc(options);
 const app = express();
 const port = process.env.PORT || 5253; // Include the port variable in .env, if you need to run on the different port
+// Serve static files from the Vite build
+app.use(express.static(path.join(__dirname, "dist")));
+
+// For React routing to work
+app.get("*", (req, res) => {
+  res.sendFile(path.resolve(__dirname, "dist", "index.html"));
+});
 app.use(
   cors({
     origin: ["http://localhost:5253", "http://localhost:8080"],
