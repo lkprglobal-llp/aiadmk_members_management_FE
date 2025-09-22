@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { on } from 'events';
 import { Admins } from '@/services/api';
+import aiadmk_logo from '../../public/aiadmk_logo.png';
 
 interface LoginFormProps {
   onLogin: (mobile: string, otp?: string) => Promise<void>;
@@ -92,7 +93,9 @@ export function LoginForm({ onLogin, onSwitchToRegister }: LoginFormProps) {
         <Card className="card-gradient border-0 shadow-[var(--shadow-primary)]">
           <CardHeader className="text-center space-y-4">
             <div className="w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-full mx-auto flex items-center justify-center animate-glow">
-              <img src="../../public/images/aiadmk_logo.png" alt="AIADMK Logo" className="w-12 h-12" />
+              <span className="text-3xl font-bold text-primary-foreground">
+                <img src={aiadmk_logo} alt='AIADMK Logo' />
+              </span>
             </div>
             <CardTitle className="text-2xl font-bold text-foreground">
               AIADMK Admin Portal
