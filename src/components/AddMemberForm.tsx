@@ -1,70 +1,167 @@
-import { useState } from 'react';
-import { UserPlus, Save, ArrowLeft, Upload } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { apiService, Member, positions } from '@/services/api';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useEffect, useMemo } from "react";
+import { UserPlus, Save, ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { apiService } from "@/services/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface AddMemberFormProps {
   onBack: () => void;
   onMemberAdded: () => void;
 }
 
+interface Position {
+  dcode: string;
+  dname: string;
+  tcode: string;
+  tname: string;
+  jcode: string;
+  jname: string;
+}
+
+// ✅ Define correct form data type
+interface MemberFormData {
+  mobile: string;
+  name: string;
+  date_of_birth: string;
+  parents_name: string;
+  address: string;
+  education_qualification: string;
+  caste: string;
+  joining_date: string;
+  joining_details: string;
+  party_member_number: string;
+  voter_id: string;
+  aadhar_number: string;
+  image: File | null;
+  dname: string;
+  tname: string;
+  jname: string;
+}
+
 export function AddMemberForm({ onBack, onMemberAdded }: AddMemberFormProps) {
-  const [formData, setFormData] = useState<Omit<Member, 'id'>>({
-    mobile: '',
-    name: '',
-    parents_name: '',
-    address: '',
-    education_qualification: '',
-    caste: '',
-    joining_details: '',
-    party_member_number: '',
-    voter_id: '',
-    aadhar_number: '',
-    image: '',
-    position: '',
+  const [formData, setFormData] = useState<MemberFormData>({
+    mobile: "",
+    name: "",
+    date_of_birth: "",
+    parents_name: "",
+    address: "",
+    education_qualification: "",
+    caste: "",
+    joining_date: "",
+    joining_details: "",
+    party_member_number: "",
+    voter_id: "",
+    aadhar_number: "",
+    image: null,
+    dname: "",
+    tname: "",
+    jname: "",
   });
-  
+
   const [isLoading, setIsLoading] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string>('');
+  const [imagePreview, setImagePreview] = useState<string>("");
+  const [positions, setPositions] = useState<Position[]>([]);
   const { toast } = useToast();
 
-  const handleInputChange = (field: keyof typeof formData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  // Filters state
+  const [filters, setFilters] = useState({
+    union: "all",
+    team: "all",
+  });
+
+  // Fetch positions
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await apiService.getPositions();
+        setPositions(Array.isArray(data) ? data.flat() : []);
+      } catch (err) {
+        toast({
+          title: "Error",
+          description: "Failed to fetch positions",
+          variant: "destructive",
+        });
+      }
+    })();
+  }, [toast]);
+
+  // Unique dropdown values
+  const unions = useMemo(
+    () => [...new Set(positions.map((p) => p.dname))],
+    [positions]
+  );
+  const teams = useMemo(
+    () =>
+      [
+        ...new Set(
+          positions
+            .filter((p) => filters.union === "all" || p.dname === filters.union)
+            .map((p) => p.tname)
+        ),
+      ],
+    [positions, filters.union]
+  );
+  const jobs = useMemo(
+    () =>
+      [
+        ...new Set(
+          positions
+            .filter(
+              (p) =>
+                (filters.union === "all" || p.dname === filters.union) &&
+                (filters.team === "all" || p.tname === filters.team)
+            )
+            .map((p) => p.jname)
+        ),
+      ],
+    [positions, filters.union, filters.team]
+  );
+
+  // Input change handler
+  const handleInputChange = (field: keyof MemberFormData, value: string | File | null) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  // Image upload
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const file = e.target.files?.[0] || null;
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        setImagePreview(result);
-        setFormData(prev => ({ ...prev, image: result }));
-      };
-      reader.readAsDataURL(file);
+      setFormData((prev) => ({ ...prev, image: file }));
+      setImagePreview(URL.createObjectURL(file));
     }
   };
 
+  // Validate form
   const validateForm = () => {
-    const required = ['mobile', 'name', 'parents_name', 'address', 'party_member_number', 'position'];
-    const missing = required.filter(field => !formData[field as keyof typeof formData]);
-    
+    const required = ["mobile", "name", "parents_name", "address", "party_member_number"];
+    const missing = required.filter((f) => !formData[f as keyof MemberFormData]);
+
     if (missing.length > 0) {
       toast({
         title: "Validation Error",
-        description: `Please fill in: ${missing.join(', ')}`,
+        description: `Please fill in: ${missing.join(", ")}`,
         variant: "destructive",
       });
       return false;
     }
 
-    // Validate mobile number
     if (!/^[6-9]\d{9}$/.test(formData.mobile)) {
       toast({
         title: "Validation Error",
@@ -74,31 +171,35 @@ export function AddMemberForm({ onBack, onMemberAdded }: AddMemberFormProps) {
       return false;
     }
 
-    // Validate Aadhar number format
-    if (formData.aadhar_number && !/^\d{4}-\d{4}-\d{4}$/.test(formData.aadhar_number)) {
-      toast({
-        title: "Validation Error",
-        description: "Aadhar number should be in format: 1234-5678-9012",
-        variant: "destructive",
-      });
-      return false;
-    }
-
     return true;
   };
 
+  // Submit form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!validateForm()) return;
 
     setIsLoading(true);
+
     try {
-      await apiService.createMember(formData);
+      const data = new FormData();
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value) {
+          if (value instanceof File) {
+            data.append(key, value);
+          } else {
+            data.append(key, value as string);
+          }
+        }
+      });
+
+      await apiService.registerMember(data);
+
       toast({
         title: "Success",
         description: "Member added successfully!",
       });
+
       onMemberAdded();
     } catch (error) {
       toast({
@@ -158,19 +259,31 @@ export function AddMemberForm({ onBack, onMemberAdded }: AddMemberFormProps) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Date of Birth</label>
+                <Input
+                  type="date"
+                  value={formData.date_of_birth}
+                  placeholder="June 01, 2025"
+                  className="bg-background pr-10"
+                  onChange={(e) =>
+                    handleInputChange('date_of_birth', e.target.value)
+                  }
+                />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="mobile">Mobile Number *</Label>
                 <Input
                   id="mobile"
                   type="tel"
-                  placeholder="9876543210"
+                  placeholder="XXXXXXXXXX"
                   value={formData.mobile}
                   onChange={(e) => handleInputChange('mobile', e.target.value)}
                   required
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <Label htmlFor="caste">Caste</Label>
                 <Input
                   id="caste"
@@ -217,28 +330,90 @@ export function AddMemberForm({ onBack, onMemberAdded }: AddMemberFormProps) {
                 <Label htmlFor="party_member_number">Party Member Number *</Label>
                 <Input
                   id="party_member_number"
-                  placeholder="ADMK001"
+                  placeholder="AIADMK001"
                   value={formData.party_member_number}
                   onChange={(e) => handleInputChange('party_member_number', e.target.value)}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="position">Position *</Label>
-                <Select value={formData.position} onValueChange={(value) => handleInputChange('position', value)}>
+                <Label htmlFor="position">Union *</Label>
+                <Select value={formData.dname} onValueChange={(value) => handleInputChange('dname', value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select position" />
                   </SelectTrigger>
                   <SelectContent>
-                    {positions.map((position) => (
-                      <SelectItem key={position} value={position}>
-                        {position}
+                    {unions.length > 0 ? (
+                      unions.map((pos, i) => (
+                        <SelectItem key={i} value={pos || "unknown"}>
+                          {pos}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-positions" disabled>
+                        No Union available
                       </SelectItem>
-                    ))}
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="position">Team *</Label>
+                <Select value={formData.tname} onValueChange={(value) => handleInputChange('tname', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {teams.length > 0 ? (
+                      teams.map((pos, i) => (
+                        <SelectItem key={i} value={pos || "unknown"}>
+                          {pos}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-positions" disabled>
+                        No Union available
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="position">Position *</Label>
+                <Select value={formData.jname} onValueChange={(value) => handleInputChange('jname', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {jobs.length > 0 ? (
+                      jobs.map((pos, i) => (
+                        <SelectItem key={i} value={pos || "unknown"}>
+                          {pos}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-positions" disabled>
+                        No Union available
+                      </SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
             </div>
+
+            <div>
+              <label className="text-sm font-medium">Joining Date</label>
+              <Input
+                type="date"
+                value={formData.joining_date.split("T")[0]}
+                placeholder="June 01, 2025"
+                className="bg-background pr-10"
+                onChange={(e) =>
+                  handleInputChange('joining_date', e.target.value)
+                }
+              />
+            </div>
+
 
             <div className="space-y-2">
               <Label htmlFor="joining_details">Joining Details</Label>

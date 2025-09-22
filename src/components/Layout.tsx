@@ -28,7 +28,7 @@ export function Layout({ children, currentPage, onPageChange, onLogout }: Layout
             <div className="flex items-center space-x-4">
               <div className="w-10 h-10 bg-primary-foreground rounded-full flex items-center justify-center">
                 <span className="text-primary font-bold text-lg">
-                  <img src='../../public/aiadmk_logo.png' alt='AIADMK Logo' className="w-6 h-6" />
+                  <img src='../../public/images/aiadmk_logo.png' alt='AIADMK Logo' className="w-6 h-6" />
                 </span>
               </div>
               <div>
@@ -46,11 +46,10 @@ export function Layout({ children, currentPage, onPageChange, onLogout }: Layout
                   <button
                     key={item.id}
                     onClick={() => onPageChange(item.id)}
-                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
-                      isActive
-                        ? 'bg-primary-foreground text-primary shadow-md'
-                        : 'text-primary-foreground hover:bg-primary-foreground/10'
-                    }`}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${isActive
+                      ? 'bg-primary-foreground text-primary shadow-md'
+                      : 'text-primary-foreground hover:bg-primary-foreground/10'
+                      }`}
                   >
                     <Icon className="w-4 h-4" />
                     <span>{item.label}</span>
@@ -97,11 +96,10 @@ export function Layout({ children, currentPage, onPageChange, onLogout }: Layout
                     onPageChange(item.id);
                     setIsMobileMenuOpen(false);
                   }}
-                  className={`flex items-center space-x-2 w-full px-4 py-3 rounded-lg transition-all duration-200 ${
-                    isActive
-                      ? 'bg-primary-foreground text-primary'
-                      : 'text-primary-foreground hover:bg-primary-foreground/10'
-                  }`}
+                  className={`flex items-center space-x-2 w-full px-4 py-3 rounded-lg transition-all duration-200 ${isActive
+                    ? 'bg-primary-foreground text-primary'
+                    : 'text-primary-foreground hover:bg-primary-foreground/10'
+                    }`}
                 >
                   <Icon className="w-4 h-4" />
                   <span>{item.label}</span>

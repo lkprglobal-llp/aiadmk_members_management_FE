@@ -1,24 +1,60 @@
 // API service layer for connecting to your MySQL backend
 // Replace BASE_URL with your actual backend URL
 
-const BASE_URL = 'http://localhost:5000/api'; // Update this with your backend URL
+import { set } from "date-fns";
+import { appendOffsetOfLegend } from "recharts/types/util/ChartUtils";
+import { json } from "stream/consumers";
+
+const BASE_URL = "http://localhost:5253/api"; // Update this with your backend URL
 
 export interface Member {
   id?: number;
   mobile: string;
   name: string;
+  date_of_birth: string;
   parents_name: string;
   address: string;
   education_qualification: string;
   caste: string;
+  joining_date: string;
   joining_details: string;
   party_member_number: string;
   voter_id: string;
   aadhar_number: string;
-  image?: string;
-  position: string;
+  image?: string | File; // 👈 allow both;
   created_at?: string;
   updated_at?: string;
+  jname: string;
+  tname: string;
+  dname: string;
+}
+
+export interface Admins {
+  id?: number;
+  username: string;
+  mobile: string;
+  role: "admin" | "user";
+  created_at?: string;
+  otp: string;
+  otp_expiry: string;
+  is_verified: boolean;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  user?: T;
+  token?: string;
+  message?: string;
+  data?: T[];
+}
+
+interface Position {
+  tcode: string;
+  dcode: string;
+  jcode: string;
+  tname: string;
+  dname: string;
+  jname: string;
 }
 
 export interface Event {
@@ -27,222 +63,393 @@ export interface Event {
   description: string;
   date: string;
   time: string;
-  type: 'party' | 'government';
-  location?: string;
+  type: string;
+  images?: string[] | File[]; // 👈 allow both
+  location: string;
   created_at?: string;
-}
-
-export interface User {
-  id?: number;
-  username: string;
-  email: string;
-  role: 'admin' | 'superuser';
-  created_at?: string;
+  updated_at?: string;
 }
 
 class ApiService {
-  private getHeaders(): HeadersInit {
-    const token = localStorage.getItem('authToken');
-    return {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
+  private async fetchWithAuth(
+    url: string,
+    options: RequestInit = {}
+  ): Promise<Response> {
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      throw new Error("Unauthorized");
+    }
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...options.headers,
     };
+    return fetch(url, { ...options, headers });
   }
 
-  // Authentication
-  async login(email: string, password: string): Promise<{ user: User; token: string }> {
+  // Authentication APIs
+  async registerUser(
+    username: string,
+    mobile: string,
+    role: string
+  ): Promise<ApiResponse<Admins>> {
     try {
-      const response = await fetch(`${BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({ email, password }),
+      const response = await fetch(`${BASE_URL}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, mobile, role }),
       });
 
-      if (!response.ok) throw new Error('Login failed');
-      
+      if (!response.ok) throw new Error("Registration failed");
+
       const data = await response.json();
-      localStorage.setItem('authToken', data.token);
       return data;
     } catch (error) {
-      console.error('Login error:', error);
-      // Mock response for demo purposes
-      const mockUser = { id: 1, username: 'admin', email, role: 'admin' as const };
-      const mockToken = 'mock-jwt-token';
-      localStorage.setItem('authToken', mockToken);
-      return { user: mockUser, token: mockToken };
+      console.error("Registration error:", error);
+      throw error;
     }
   }
 
-  async logout(): Promise<void> {
-    localStorage.removeItem('authToken');
-    // You can also call your backend logout endpoint here
-  }
-
-  // Members API
-  async getMembers(): Promise<Member[]> {
+  async login(mobile: string): Promise<ApiResponse<never>> {
     try {
-      const response = await fetch(`${BASE_URL}/user-details`, {
-        headers: this.getHeaders(),
+      const response = await fetch(`${BASE_URL}/Login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile }),
       });
 
-      if (!response.ok) throw new Error('Failed to fetch members');
-      return await response.json();
+      if (!response.ok) throw new Error("Login failed");
+
+      const data = await response.json();
+      if (!data) {
+        throw new Error("User not found");
+      }
+      // console.log(data);
+      return data;
     } catch (error) {
-      console.error('Get members error:', error);
+      console.error("Login error:", error);
+    }
+  }
+
+  async validateOtp(
+    mobile: string,
+    otp: string
+  ): Promise<{
+    success: boolean;
+    token?: string;
+    user?: Admins;
+    message: string;
+  }> {
+    try {
+      const response = await fetch(`${BASE_URL}/validate-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile, otp }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || data.message || "OTP validation failed");
+      }
+
+      const data = await response.json();
+      // console.log("validateOtp raw response:", data);
+
+      if (!data.success) {
+        throw new Error(data.error || data.message || "Invalid OTP or user");
+      }
+
+      return {
+        success: true,
+        token: data.token,
+        user: data.user,
+        message: data.message || "Login successful",
+      };
+    } catch (error) {
+      console.error("OTP validation error:", error);
+      throw error instanceof Error
+        ? error
+        : new Error("An unexpected error occurred during OTP validation");
+    }
+  }
+
+  //** Validate token with the promise state */
+  async validateToken(token: string): Promise<Admins> {
+    try {
+      const response = await this.fetchWithAuth(`${BASE_URL}/validate-token`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Invalid token" : "Token validation failed"
+        );
+      }
+      const data = await response.json();
+      if (!data.user) {
+        throw new Error("Token validation response missing user");
+      }
+      // Token is valid, no need to return anything
+      return data.user;
+    } catch (error) {
+      console.error("Token validation error:", error);
+      throw error;
+    }
+  }
+
+  // async logout(): Promise<void> {
+  //   const response = await fetch(`${BASE_URL}/logout`, {
+  //     method: "POST",
+  //     headers: {
+  //       "Content-Type": "application/json",
+  //       Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+  //     },
+  //   });
+
+  //   if (!response.ok) throw new Error("Logout failed");
+  //   await response.json();
+  // }
+
+  //Members API
+
+  async getMembers(): Promise<void> {
+    try {
+      const response = await this.fetchWithAuth(`${BASE_URL}/view-members`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+      });
+      // console.log(response);
+      const data = await response.json();
+      // console.log(data);
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to fetch members"
+        );
+      }
+
+      // return Array.isArray(data.members) ? data.members : [];
+      // console.log(data.members);
+      return data.members;
+    } catch (error) {
+      console.error("Get members error:", error);
       // Mock data for demo
-      return mockMembers;
+      // return mockMembers;
     }
   }
 
-  async createMember(member: Omit<Member, 'id'>): Promise<Member> {
+  async registerMember(member: FormData): Promise<Member> {
     try {
-      const response = await fetch(`${BASE_URL}/members`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(member),
+      const response = await fetch(`${BASE_URL}/Register-Member`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+        body: member,
       });
+      console.log("api", member);
 
-      if (!response.ok) throw new Error('Failed to create member');
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to add member"
+        );
+      }
       return await response.json();
     } catch (error) {
-      console.error('Create member error:', error);
+      console.error("Register member error:", error);
+      throw error;
+    }
+  }
+
+  async updateMember(id: number | string, payload: FormData): Promise<Member> {
+    try {
+      // const isFormData = payload instanceof FormData;
+      const response = await fetch(`${BASE_URL}/update-member/${id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+        body: payload,
+      });
+
+      if (!response) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to update member"
+        );
+      }
+      return await response.json();
+    } catch (error) {
+      console.error("Update member error:", error);
       // Mock response
-      return { ...member, id: Date.now() };
+      return { id } as Member;
     }
   }
 
-  async updateMember(id: number, member: Partial<Member>): Promise<Member> {
+  async deleteMember(
+    id: number
+  ): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await fetch(`${BASE_URL}/members/${id}`, {
-        method: 'PUT',
-        headers: this.getHeaders(),
-        body: JSON.stringify(member),
+      const response = await fetch(`${BASE_URL}/delete-member/${id}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
       });
 
-      if (!response.ok) throw new Error('Failed to update member');
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to delete member"
+        );
+      }
+
       return await response.json();
     } catch (error) {
-      console.error('Update member error:', error);
-      // Mock response
-      return { ...member, id } as Member;
+      console.error("Delete member error:", error);
     }
   }
 
-  async deleteMember(id: number): Promise<void> {
+  async exportMember(id: number): Promise<Blob> {
     try {
-      const response = await fetch(`${BASE_URL}/members/${id}`, {
-        method: 'DELETE',
-        headers: this.getHeaders(),
-      });
-
-      if (!response.ok) throw new Error('Failed to delete member');
+      const response = await this.fetchWithAuth(
+        `${BASE_URL}/export/member/${id}`,
+        {
+          headers: { "Content-Type": "application/octet-stream" },
+        }
+      );
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to export member"
+        );
+      }
+      return await response.blob();
     } catch (error) {
-      console.error('Delete member error:', error);
+      console.error("Export member error:", error);
+      throw error;
     }
   }
 
-  // Events API
-  async getEvents(): Promise<Event[]> {
+  async exportAllMembers(): Promise<Blob> {
     try {
-      const response = await fetch(`${BASE_URL}/events`, {
-        headers: this.getHeaders(),
+      const response = await this.fetchWithAuth(`${BASE_URL}/export/members`, {
+        headers: { "Content-Type": "application/octet-stream" },
       });
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to export members"
+        );
+      }
+      return await response.blob();
+    } catch (error) {
+      console.error("Export all members error:", error);
+      throw error;
+    }
+  }
 
-      if (!response.ok) throw new Error('Failed to fetch events');
+  async getPositions(): Promise<Position[][]> {
+    try {
+      const response = await this.fetchWithAuth(`${BASE_URL}/view-positions`);
+
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to fetch positions"
+        );
+      }
+      const data = await response.json();
+      return data.positions;
+    } catch (error) {
+      console.error("Get positions error:", error);
+      throw error;
+    }
+  }
+
+  async getEvents() {
+    try {
+      const response = await this.fetchWithAuth(`${BASE_URL}/view-events`);
+
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to fetch events"
+        );
+      }
+      const data = await response.json();
+      return data.events;
+    } catch (error) {
+      console.error("Get events error:", error);
+      throw error;
+    }
+  }
+
+  async addEvent(formdata: FormData): Promise<Event> {
+    try {
+      const response = await fetch(`${BASE_URL}/add-event`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+        method: "POST",
+        body: formdata,
+      });
+      console.log("api event", formdata);
+      console.log("api event response", response);
+
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to add event"
+        );
+      }
       return await response.json();
     } catch (error) {
-      console.error('Get events error:', error);
-      // Mock data for demo
-      return mockEvents;
+      console.error("Add event error:", error);
+      throw error;
     }
   }
 
-  async createEvent(event: Omit<Event, 'id'>): Promise<Event> {
+  async updateEvent(id: number | string, event: FormData): Promise<Event> {
     try {
-      const response = await fetch(`${BASE_URL}/events`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(event),
-      });
+      const response = await this.fetchWithAuth(
+        `${BASE_URL}/update-event/${id}`,
+        {
+          method: "PUT",
+          body: event,
+        }
+      );
 
-      if (!response.ok) throw new Error('Failed to create event');
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to update event"
+        );
+      }
       return await response.json();
     } catch (error) {
-      console.error('Create event error:', error);
-      // Mock response
-      return { ...event, id: Date.now() };
+      console.error("Update event error:", error);
+      throw error;
+    }
+  }
+
+  async deleteEvent(
+    id: number
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await this.fetchWithAuth(
+        `${BASE_URL}/delete-event/${id}`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 ? "Unauthorized" : "Failed to delete event"
+        );
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Delete event error:", error);
+      throw error;
     }
   }
 }
-
-// Mock data for demonstration
-const mockMembers: Member[] = [
-  {
-    id: 1,
-    mobile: '9876543210',
-    name: 'Rajesh Kumar',
-    parents_name: 'Suresh Kumar',
-    address: '123 Anna Nagar, Chennai',
-    education_qualification: 'B.A. Political Science',
-    caste: 'BC',
-    joining_details: 'Joined in 2020',
-    party_member_number: 'ADMK001',
-    voter_id: 'TN1234567890',
-    aadhar_number: '1234-5678-9012',
-    position: 'District Secretary',
-    created_at: '2024-01-15',
-  },
-  {
-    id: 2,
-    mobile: '9876543211',
-    name: 'Priya Selvam',
-    parents_name: 'Selvam Raj',
-    address: '456 T.Nagar, Chennai',
-    education_qualification: 'M.A. Tamil Literature',
-    caste: 'MBC',
-    joining_details: 'Joined in 2019',
-    party_member_number: 'ADMK002',
-    voter_id: 'TN1234567891',
-    aadhar_number: '1234-5678-9013',
-    position: 'Youth Wing Leader',
-    created_at: '2024-01-10',
-  },
-];
-
-const mockEvents: Event[] = [
-  {
-    id: 1,
-    title: 'Party Executive Meeting',
-    description: 'Monthly executive committee meeting',
-    date: '2024-02-15',
-    time: '10:00',
-    type: 'party',
-    location: 'Party Headquarters, Chennai',
-    created_at: '2024-01-20',
-  },
-  {
-    id: 2,
-    title: 'Government Budget Session',
-    description: 'Tamil Nadu Assembly Budget Session',
-    date: '2024-02-20',
-    time: '11:00',
-    type: 'government',
-    location: 'Assembly House, Chennai',
-    created_at: '2024-01-25',
-  },
-];
-
-export const positions = [
-  'District Secretary',
-  'Youth Wing Leader',
-  'Women Wing Leader',
-  'Booth Committee President',
-  'Village Panchayat Member',
-  'Town Panchayat Member',
-  'Block Committee Member',
-  'State Committee Member',
-  'General Member',
-  'Volunteer',
-];
 
 export const apiService = new ApiService();
