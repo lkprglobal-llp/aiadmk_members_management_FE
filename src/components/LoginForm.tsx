@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { on } from 'events';
 import { Admins } from '@/services/api';
-import aiadmk_logo from '../../public/aiadmk_logo.png';
+import aiadmk_logo from '../../public/images/aiadmk_logo.png';
 
 interface LoginFormProps {
   onLogin: (mobile: string, otp?: string) => Promise<void>;
