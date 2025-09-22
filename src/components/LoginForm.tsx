@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import aiadmk_logo from '../../public/aiadmk_logo.png';
 
 interface LoginFormProps {
   onLogin: (email: string, password: string) => Promise<void>;
@@ -18,7 +19,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       toast({
         title: "Error",
@@ -53,7 +54,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
           <CardHeader className="text-center space-y-4">
             <div className="w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-full mx-auto flex items-center justify-center animate-glow">
               <span className="text-3xl font-bold text-primary-foreground">
-                <img src='../../public/aiadmk_logo.png' alt='AIADMK Logo' />
+                <img src={aiadmk_logo} alt='AIADMK Logo' />
               </span>
             </div>
             <CardTitle className="text-2xl font-bold text-foreground">
@@ -63,7 +64,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
               Sign in to access the party management system
             </CardDescription>
           </CardHeader>
-          
+
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
